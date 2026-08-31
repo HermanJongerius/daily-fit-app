@@ -167,6 +167,31 @@ app.get('/admin/planning', requireRole('admin'), async (req, res) => {
   const byDate = new Map(rows.map((r) => [isoDateLocal(r.date), r]));
   const merged = days.map((d) => ({ ...d, ...(byDate.get(d.date) || {}), date: d.date }));
 
+  // Cloudflare is soms nog even bezig met het verwerken van een net geüploade video
+  // (de status stond op "processing" op het moment dat 'ie gekoppeld werd). Elke keer
+  // dat de beheerder dit scherm opent, wordt dat voor openstaande video's opnieuw
+  // gecontroleerd, zodat "Wordt verwerkt" vanzelf "Klaar" wordt zodra Cloudflare klaar is
+  // — zonder dat de beheerder daar iets voor hoeft te doen.
+  if (cfConfigured) {
+    for (const day of merged) {
+      if (day.video_status === 'processing' && day.video_uid) {
+        try {
+          const status = await getVideoStatus(day.video_uid);
+          if (status.ready) {
+            await pool.query(
+              'UPDATE schedule SET video_status = $2, duration_sec = $3, updated_at = now() WHERE date = $1',
+              [day.date, 'ready', status.durationSec]
+            );
+            day.video_status = 'ready';
+            day.duration_sec = status.durationSec;
+          }
+        } catch (err) {
+          console.error(`Kon status van video ${day.video_uid} (${day.date}) niet verversen:`, err.message);
+        }
+      }
+    }
+  }
+
   res.send(views.planningPage({ days: merged, cfConfigured }));
 });
 
