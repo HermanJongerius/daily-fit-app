@@ -130,6 +130,17 @@ export function videoPage({ schedule, streamEmbedSrc, devMode }) {
   return layout({ title: 'Oefening', body });
 }
 
+export function errorPage() {
+  const body = `
+  <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:${COLORS.cream};padding:24px;">
+    ${logoMark(44)}
+    <div style="font-size:22px;font-weight:900;margin-top:18px;">Er ging iets mis</div>
+    <div style="font-size:16px;font-weight:600;color:${COLORS.inkSoft};margin-top:8px;max-width:380px;">Probeer het over een moment nog eens. Blijft dit gebeuren? Neem dan contact op met de beheerder.</div>
+    <a href="/login" style="margin-top:20px;background:${COLORS.teal900};color:${COLORS.cream};text-decoration:none;font-weight:700;padding:12px 22px;border-radius:12px;">Terug naar inloggen</a>
+  </div>`;
+  return layout({ title: 'Er ging iets mis', body });
+}
+
 export function expiredPage({ user }) {
   const body = `
   <div style="min-height:100vh;display:flex;flex-direction:column;background:${COLORS.cream};padding-bottom:64px;">

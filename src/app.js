@@ -267,4 +267,13 @@ app.post('/admin/gebruikers/:username', requireRole('admin'), async (req, res) =
   res.redirect('/admin/gebruikers');
 });
 
+// --- vangnet: elke onverwachte fout krijgt een nette Nederlandse pagina i.p.v. een kale
+// "Internal Server Error", en wordt hier gelogd zodat de oorzaak terug te vinden is in de
+// serverlogs (bij Railway: het tabblad "Deployments" -> de actieve deployment -> "Logs"). ---
+app.use((err, req, res, next) => {
+  console.error('Onverwachte fout op', req.method, req.originalUrl, ':', err);
+  if (res.headersSent) return next(err);
+  res.status(500).send(views.errorPage());
+});
+
 export default app;

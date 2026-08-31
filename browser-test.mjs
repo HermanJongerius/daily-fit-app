@@ -1,5 +1,8 @@
 import pkg from '/home/claude/.npm-global/lib/node_modules/playwright/index.js';
 const { chromium } = pkg;
+import { JOINTS_BY_WEEKDAY } from './src/helpers.js';
+
+const expectedJointToday = JOINTS_BY_WEEKDAY[new Date().getDay()];
 
 function assert(cond, msg) {
   if (!cond) throw new Error('ASSERTION FAILED: ' + msg);
@@ -31,7 +34,7 @@ await page.click('button[type="submit"]');
 await page.waitForLoadState('networkidle');
 text = await page.textContent('body');
 assert(page.url().endsWith('/vandaag'), 'senior komt na login op /vandaag terecht');
-assert(text.includes('Enkels') || text.includes('enkels'), 'de oefening van vandaag (Enkels) wordt getoond');
+assert(text.toLowerCase().includes(expectedJointToday.toLowerCase()), `de oefening van vandaag (${expectedJointToday}) wordt getoond`);
 
 // --- naar de oefening, en in dev-modus als uitgekeken markeren ---
 await page.click('a[href="/video"]');
