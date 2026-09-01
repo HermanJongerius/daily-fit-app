@@ -104,9 +104,52 @@ export function vandaagPage({ user, schedule, done, weekDots }) {
   return layout({ title: 'Vandaag', body });
 }
 
-export function videoPage({ schedule, streamEmbedSrc, devMode }) {
+export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
+  // Bij een echte video wordt de Cloudflare Stream-speler-SDK geladen zodat we kunnen
+  // herkennen wanneer het afspelen voltooid is: pas dan telt de oefening als gedaan en
+  // wordt automatisch naar /vandaag doorgestuurd (waar de server het al blokkeert om
+  // vandaag nog een keer te kijken). Twee onafhankelijke signalen worden gebruikt, omdat
+  // het "ended"-event van Cloudflare's speler-koppeling in de praktijk niet altijd
+  // doorkomt: naast "ended" wordt ook continu de afspeelpositie gevolgd ("timeupdate") en
+  // als beveiliging verschijnt er hoe dan ook een handmatige knop zodra de video (volgens
+  // de bekende lengte) uitgekeken had moeten zijn, zodat iemand nooit vast kan komen te
+  // zitten op dit scherm.
+  const fallbackSeconds = (durationSec && durationSec > 0 ? durationSec : 330) + 5;
   const player = streamEmbedSrc
-    ? `<iframe src="${esc(streamEmbedSrc)}" style="width:100%;aspect-ratio:16/9;border:none;border-radius:18px;" allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;" allowfullscreen></iframe>`
+    ? `<iframe id="stream-player" src="${esc(streamEmbedSrc)}" style="width:100%;aspect-ratio:16/9;border:none;border-radius:18px;" allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;" allowfullscreen></iframe>
+       <div id="fallback-wrap" style="display:none;margin-top:14px;">
+         <div style="font-size:13px;font-weight:700;color:${COLORS.inkSoft};margin-bottom:8px;">Video uitgekeken?</div>
+         <button type="button" id="fallback-button" style="height:52px;padding:0 28px;border:none;border-radius:16px;background:${COLORS.teal700};color:${COLORS.white};font-family:inherit;font-size:15px;font-weight:800;">Ja, ga verder</button>
+       </div>
+       <script src="https://embed.cloudflarestream.com/embed/sdk.latest.js"></script>
+       <script>
+         (function () {
+           var player = Stream(document.getElementById('stream-player'));
+           var done = false;
+           function markDone() {
+             if (done) return;
+             done = true;
+             fetch('/video/complete', { method: 'POST' }).then(function () {
+               window.location.href = '/vandaag';
+             });
+           }
+           player.addEventListener('ended', markDone);
+           // Vangnet 1: sommige browsers/koppelingen laten "ended" niet altijd doorkomen,
+           // dus ook de afspeelpositie zelf checken.
+           player.addEventListener('timeupdate', function () {
+             if (player.duration && player.currentTime >= player.duration - 0.75) markDone();
+           });
+           // Vangnet 2: als er na de bekende videolengte nog niets is gebeurd, laat dan
+           // een knop zien zodat iemand niet vast blijft zitten op dit scherm.
+           setTimeout(function () {
+             if (done) return;
+             var wrap = document.getElementById('fallback-wrap');
+             if (wrap) wrap.style.display = '';
+           }, ${fallbackSeconds * 1000});
+           var fallbackButton = document.getElementById('fallback-button');
+           if (fallbackButton) fallbackButton.addEventListener('click', markDone);
+         })();
+       </script>`
     : `<div style="width:100%;aspect-ratio:16/9;border-radius:18px;background:${COLORS.teal900};color:${COLORS.cream};display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;font-weight:700;">
          Cloudflare Stream is nog niet geconfigureerd (CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN / CLOUDFLARE_STREAM_CUSTOMER_CODE ontbreken).
        </div>`;

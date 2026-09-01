@@ -138,7 +138,7 @@ app.get('/video', requireRole('senior'), async (req, res) => {
     }
   }
 
-  res.send(views.videoPage({ schedule, streamEmbedSrc, devMode: !streamEmbedSrc }));
+  res.send(views.videoPage({ schedule, streamEmbedSrc, devMode: !streamEmbedSrc, durationSec: schedule.duration_sec }));
 });
 
 app.post('/video/complete', requireRole('senior'), async (req, res) => {
