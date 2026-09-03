@@ -1,4 +1,4 @@
-import { esc, fmtDateLong, jointForDate, JOINTS_BY_WEEKDAY } from './helpers.js';
+import { esc, fmtDateLong, jointForDate, JOINTS_BY_WEEKDAY, APP_VERSION } from './helpers.js';
 
 // Merkstijl, overgenomen uit de schets en de demo.
 const COLORS = {
@@ -46,7 +46,7 @@ ${body}
 }
 
 function demoFooter(extra = '') {
-  return `<div style="text-align:center;padding:18px 20px;font-size:12px;font-weight:600;color:${COLORS.inkSoft};">DailyFit ${extra}</div>`;
+  return `<div style="text-align:center;padding:18px 20px;font-size:12px;font-weight:600;color:${COLORS.inkSoft};">DailyFit ${extra ? extra + ' ' : ''}&middot; v${APP_VERSION}</div>`;
 }
 
 export function loginPage({ error }) {
