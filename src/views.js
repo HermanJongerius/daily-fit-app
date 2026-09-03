@@ -124,7 +124,17 @@ export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
   // zitten op dit scherm.
   const fallbackSeconds = (durationSec && durationSec > 0 ? durationSec : 330) + 5;
   const player = streamEmbedSrc
-    ? `<div id="video-frame-wrap" style="position:relative;width:100%;">
+    ? `<style>
+         /* Op iPhones (Safari) mag het scherm van een iframe niet altijd echt "fullscreen"
+            gemaakt worden via de browser zelf (een bekende beperking van Safari) — daarom
+            wordt hier zelf een schermvullende weergave gemaakt met gewone opmaak, die op
+            elk toestel werkt, in plaats van te vertrouwen op die browserfunctie alleen. */
+         #video-frame-wrap.video-fill { position:fixed; inset:0; width:100vw; height:100vh; max-width:none; z-index:9999; background:#000; border-radius:0; margin:0; }
+         #video-frame-wrap.video-fill #stream-player { width:100%; height:100%; aspect-ratio:auto; border-radius:0; }
+         #video-frame-wrap.video-fill #start-video-button { border-radius:0; }
+         body.video-fill-lock { overflow:hidden; }
+       </style>
+       <div id="video-frame-wrap" style="position:relative;width:100%;">
          <iframe id="stream-player" src="${esc(streamEmbedSrc)}" style="width:100%;aspect-ratio:16/9;border:none;border-radius:18px;display:block;" allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>
          <button type="button" id="start-video-button" style="position:absolute;inset:0;width:100%;height:100%;border:none;border-radius:18px;background:rgba(32,74,66,0.88);color:${COLORS.white};font-family:inherit;font-size:19px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:10px;">
            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg> Start de video
@@ -138,6 +148,7 @@ export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
        <script>
          (function () {
            var iframeEl = document.getElementById('stream-player');
+           var wrapEl = document.getElementById('video-frame-wrap');
            var done = false;
            // De Cloudflare-koppeling zelf kan om allerlei redenen niet laden (traag netwerk,
            // adblocker, tijdelijke storing) — dat mag het vangnet hieronder nooit blokkeren,
@@ -149,7 +160,23 @@ export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
              player = null;
            }
 
-           function exitFullscreenIfNeeded() {
+           function enterFillScreen() {
+             // Eigen schermvullende weergave (werkt altijd, ook op iPhone/Safari).
+             wrapEl.classList.add('video-fill');
+             document.body.classList.add('video-fill-lock');
+             // Daarnaast: als de browser het wél ondersteunt, ook echt "fullscreen"
+             // aanvragen (verbergt op sommige toestellen ook de adresbalk). Dit is een
+             // bonus, geen vereiste — als het niet lukt of niet bestaat, gebeurt er
+             // gewoon niets en blijft de eigen schermvullende weergave hierboven staan.
+             var requestFs = iframeEl.requestFullscreen || iframeEl.webkitRequestFullscreen;
+             if (requestFs) {
+               try { requestFs.call(iframeEl); } catch (e) {}
+             }
+           }
+
+           function exitFillScreen() {
+             wrapEl.classList.remove('video-fill');
+             document.body.classList.remove('video-fill-lock');
              var exit = document.exitFullscreen || document.webkitExitFullscreen;
              if ((document.fullscreenElement || document.webkitFullscreenElement) && exit) {
                try { exit.call(document); } catch (e) {}
@@ -159,7 +186,7 @@ export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
            function markDone() {
              if (done) return;
              done = true;
-             exitFullscreenIfNeeded();
+             exitFillScreen();
              fetch('/video/complete', { method: 'POST' }).then(function () {
                window.location.href = '/vandaag';
              });
@@ -171,10 +198,7 @@ export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
            var startButton = document.getElementById('start-video-button');
            if (startButton) {
              startButton.addEventListener('click', function () {
-               var requestFs = iframeEl.requestFullscreen || iframeEl.webkitRequestFullscreen;
-               if (requestFs) {
-                 try { requestFs.call(iframeEl); } catch (e) {}
-               }
+               enterFillScreen();
                if (player) {
                  try { player.play(); } catch (e) {}
                }
@@ -195,7 +219,7 @@ export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
            // knop zien zodat iemand nooit vast blijft zitten op dit scherm.
            setTimeout(function () {
              if (done) return;
-             exitFullscreenIfNeeded();
+             exitFillScreen();
              var wrap = document.getElementById('fallback-wrap');
              if (wrap) wrap.style.display = '';
            }, ${fallbackSeconds * 1000});

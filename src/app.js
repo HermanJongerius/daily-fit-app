@@ -99,15 +99,19 @@ app.get('/vandaag', requireRole('senior'), async (req, res) => {
   );
   const done = doneRows.length > 0;
 
-  // voortgang van de laatste 7 dagen, voor de puntjes-weergave
+  // voortgang van de huidige week (altijd maandag t/m zondag, in die volgorde), voor de
+  // puntjes-weergave — niet de laatste 7 dagen teruggerekend vanaf vandaag.
+  const dayOfWeek = new Date().getDay(); // 0=zo..6=za (JS getDay())
+  const daysSinceMonday = (dayOfWeek + 6) % 7; // ma=0 .. zo=6
+  const monday = new Date(Date.now() - daysSinceMonday * 86400000);
   const { rows: recentRows } = await pool.query(
-    `SELECT date FROM completions WHERE user_id = $1 AND date >= $2::date - interval '6 days'`,
-    [req.user.id, today]
+    `SELECT date FROM completions WHERE user_id = $1 AND date >= $2::date`,
+    [req.user.id, isoDateLocal(monday)]
   );
   const doneDates = new Set(recentRows.map((r) => isoDateLocal(r.date)));
   const dots = [];
-  for (let i = 6; i >= 0; i--) {
-    const d = new Date(Date.now() - i * 86400000);
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(monday.getTime() + i * 86400000);
     const iso = isoDateLocal(d);
     const isDone = doneDates.has(iso);
     const letter = DAY_LETTERS_BY_WEEKDAY[d.getDay()];
