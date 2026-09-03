@@ -17,5 +17,5 @@ try {
 }
 
 app.listen(port, () => {
-  console.log(`Daily Fit draait op http://localhost:${port}`);
+  console.log(`DailyFit draait op http://localhost:${port}`);
 });

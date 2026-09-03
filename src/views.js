@@ -7,9 +7,17 @@ const COLORS = {
   inkSoft: '#746C5F', border: '#E7DFCF', amber600: '#A6600F',
 };
 
+// Het nieuwe DailyFit-logo (het "D"-icoon), aangeleverd als afbeelding, hier ingebed als
+// data-URI zodat er geen los bestand nodig is. Alleen de vorm is overgenomen: het is
+// hertekend in de bestaande merkkleur (crème) zodat het icoon blijft passen in het
+// bestaande donkergroene rondje/badge-uiterlijk dat overal in de app wordt gebruikt.
+const LOGO_ICON_B64 = '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';
+
 function logoMark(size = 40) {
+  const iconHeight = size * 0.62;
+  const iconWidth = iconHeight * (96 / 132);
   return `<div style="width:${size}px;height:${size}px;border-radius:${size * 0.28}px;background:${COLORS.teal900};display:flex;align-items:center;justify-content:center;">
-    <svg width="${size * 0.55}" height="${size * 0.55}" viewBox="0 0 24 24" fill="none" stroke="${COLORS.cream}" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12h4l2 5 2-10 2 5h4"></path></svg>
+    <img src="data:image/png;base64,${LOGO_ICON_B64}" width="${iconWidth}" height="${iconHeight}" alt="DailyFit" style="display:block;" />
   </div>`;
 }
 
@@ -19,7 +27,7 @@ function layout({ title, body, headerRight = '' }) {
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(title)} — Daily Fit</title>
+<title>${esc(title)} — DailyFit</title>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&display=swap">
 <style>
   *{box-sizing:border-box;}
@@ -38,7 +46,7 @@ ${body}
 }
 
 function demoFooter(extra = '') {
-  return `<div style="text-align:center;padding:18px 20px;font-size:12px;font-weight:600;color:${COLORS.inkSoft};">Daily Fit ${extra}</div>`;
+  return `<div style="text-align:center;padding:18px 20px;font-size:12px;font-weight:600;color:${COLORS.inkSoft};">DailyFit ${extra}</div>`;
 }
 
 export function loginPage({ error }) {
@@ -47,7 +55,7 @@ export function loginPage({ error }) {
     <div style="width:100%;max-width:380px;">
       <div style="display:flex;flex-direction:column;align-items:center;gap:10px;margin-bottom:28px;">
         ${logoMark(60)}
-        <div style="font-size:24px;font-weight:900;color:${COLORS.teal900};">Daily Fit</div>
+        <div style="font-size:24px;font-weight:900;color:${COLORS.teal900};">DailyFit</div>
         <div style="font-size:14px;font-weight:600;color:${COLORS.inkSoft};">Elke dag een beetje bewegen</div>
       </div>
       <form method="post" action="/login" style="background:${COLORS.white};border:1px solid ${COLORS.border};border-radius:20px;padding:28px 24px;display:flex;flex-direction:column;gap:16px;">
@@ -92,7 +100,7 @@ export function vandaagPage({ user, schedule, done, weekDots }) {
   const body = `
   <div style="min-height:100vh;display:flex;flex-direction:column;background:${COLORS.cream};padding-bottom:64px;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 22px 0;">
-      <div style="display:flex;align-items:center;gap:8px;">${logoMark(30)}<div style="font-weight:800;font-size:16px;color:${COLORS.teal900};">Daily Fit</div></div>
+      <div style="display:flex;align-items:center;gap:8px;">${logoMark(30)}<div style="font-weight:800;font-size:16px;color:${COLORS.teal900};">DailyFit</div></div>
       <form method="post" action="/logout"><button type="submit" style="background:none;border:none;font-family:inherit;font-size:13px;font-weight:700;color:${COLORS.inkSoft};">Uitloggen</button></form>
     </div>
     <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;max-width:420px;margin:0 auto;width:100%;">
@@ -188,7 +196,7 @@ export function expiredPage({ user }) {
   const body = `
   <div style="min-height:100vh;display:flex;flex-direction:column;background:${COLORS.cream};padding-bottom:64px;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 22px 0;">
-      <div style="display:flex;align-items:center;gap:8px;">${logoMark(30)}<div style="font-weight:800;font-size:16px;color:${COLORS.teal900};">Daily Fit</div></div>
+      <div style="display:flex;align-items:center;gap:8px;">${logoMark(30)}<div style="font-weight:800;font-size:16px;color:${COLORS.teal900};">DailyFit</div></div>
       <form method="post" action="/logout"><button type="submit" style="background:none;border:none;font-family:inherit;font-size:13px;font-weight:700;color:${COLORS.inkSoft};">Uitloggen</button></form>
     </div>
     <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;max-width:420px;margin:0 auto;width:100%;">
@@ -212,7 +220,7 @@ function adminShell(active, body) {
   return `
   <div style="min-height:100vh;background:${COLORS.cream};">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 28px;border-bottom:1px solid ${COLORS.border};">
-      <div style="display:flex;align-items:center;gap:10px;">${logoMark(32)}<div style="font-weight:900;font-size:18px;color:${COLORS.teal900};">Daily Fit — Beheer</div></div>
+      <div style="display:flex;align-items:center;gap:10px;">${logoMark(32)}<div style="font-weight:900;font-size:18px;color:${COLORS.teal900};">DailyFit — Beheer</div></div>
       <form method="post" action="/logout"><button type="submit" style="background:none;border:none;font-family:inherit;font-size:13px;font-weight:700;color:${COLORS.inkSoft};">Uitloggen</button></form>
     </div>
     <div style="display:flex;gap:6px;padding:16px 28px 0;">${nav}</div>

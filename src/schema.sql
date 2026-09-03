@@ -1,4 +1,4 @@
--- Daily Fit — databankstructuur
+-- DailyFit — databankstructuur
 -- Wordt uitgevoerd door src/migrate.js. Veilig om opnieuw te draaien (IF NOT EXISTS overal).
 
 CREATE TABLE IF NOT EXISTS users (

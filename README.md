@@ -1,6 +1,6 @@
-# Daily Fit — echte applicatie (eerste versie)
+# DailyFit — echte applicatie (eerste versie)
 
-Dit is de echte, werkende opvolger van de klikbare demo: een Node.js-webapplicatie met een PostgreSQL-database, gebouwd volgens `technisch-ontwerp.md` in het Daily Fit-project. Alles hieronder is getest en werkt lokaal; wat nog moet gebeuren staat onderaan.
+Dit is de echte, werkende opvolger van de klikbare demo: een Node.js-webapplicatie met een PostgreSQL-database, gebouwd volgens `technisch-ontwerp.md` in het DailyFit-project. Alles hieronder is getest en werkt lokaal; wat nog moet gebeuren staat onderaan.
 
 ## Wat er nu al werkt
 - Inloggen: senior met gebruikersnaam + mobiel nummer (spaties/streepjes worden genegeerd), beheerder met gebruikersnaam + wachtwoord (veilig gehasht, nooit in platte tekst opgeslagen).
@@ -43,7 +43,7 @@ Zet deze drie waarden in `.env` (lokaal) of als omgevingsvariabelen op Railway (
 5. Niets meer te draaien — de tabellen en het beheerder-account worden automatisch klaargezet zodra de applicatie voor het eerst opstart.
 6. Koppel het domein mijndailyfit.nl aan deze Railway-service (Railway geeft de precieze DNS-instructie).
 
-Een eenvoudigere, stap-voor-stap versie van dit hoofdstuk (zonder terminal-commando's, met screenshots-in-woorden) staat in het Daily Fit-project als `railway-en-cloudflare-simpel.md`.
+Een eenvoudigere, stap-voor-stap versie van dit hoofdstuk (zonder terminal-commando's, met screenshots-in-woorden) staat in het DailyFit-project als `railway-en-cloudflare-simpel.md`.
 
 ## Wat nog moet gebeuren
 - Dit is nog niet naar Railway gedeployed — dat is de volgende stap zodra je zover bent.
