@@ -1,12 +1,13 @@
 # DailyFit — echte applicatie
 
-**Huidige versie: 1.4.0** (zie ook `version` in `package.json` — deze twee horen altijd gelijk te zijn).
+**Huidige versie: 1.4.1** (zie ook `version` in `package.json` — deze twee horen altijd gelijk te zijn).
 
 Dit is de echte, werkende opvolger van de klikbare demo: een Node.js-webapplicatie met een PostgreSQL-database, gebouwd volgens `technisch-ontwerp.md` in het DailyFit-project. Alles hieronder is getest en werkt lokaal; wat nog moet gebeuren staat onderaan.
 
 ## Wijzigingen (changelog)
 Bij elke wijziging aan de code wordt hier een nieuwe regel toegevoegd én het versienummer hierboven (en in `package.json`) opgehoogd. Zo is in één oogopslag te zien welke versie waar draait (test vs. live) en wat er precies is veranderd — dat voorkomt dat een fout ergens onopgemerkt blijft hangen.
 
+- **1.4.1** (3 sep 2026) — Echte bugfix voor de schermvullende video op de iPhone: in versie 1.4.0 werd de "hele scherm vullen"-instructie stil overschreven door een andere, oudere stijl-instructie op hetzelfde onderdeel, waardoor het op de iPhone (getest via een echte oefenversie-video) niet werkte — de video werd wel heel hoog, maar bleef los tussen de rest van de pagina staan in plaats van het scherm echt te bedekken. Dat conflict is nu weggehaald en opnieuw getest.
 - **1.4.0** (3 sep 2026) — Twee verbeteringen naar aanleiding van getest gebruik: (1) de video vult nu écht het hele scherm op alle toestellen, ook op de iPhone — eerder werkte dit alleen op de computer, omdat Safari op iPhone de browser-eigen "volledig scherm"-functie niet toestaat voor een ingesloten video; er is nu een eigen schermvullende weergave gebouwd die daar niet van afhankelijk is. (2) De 7 dag-bolletjes staan nu altijd in een vaste volgorde maandag t/m zondag (M D W D V Z Z) in plaats van steeds de laatste 7 dagen terug te rekenen vanaf vandaag.
 - **1.3.1** (3 sep 2026) — Het versienummer staat nu ook onderaan in de app zelf (bijv. "DailyFit — werkende versie · v1.3.1"), zodat direct te zien is welke versie er open staat, zonder in de bestanden te hoeven kijken.
 - **1.3.0** (3 sep 2026) — De video speelt nu op het hele scherm af: op de video-pagina verschijnt een grote "Start de video"-knop, die zowel het afspelen start als het scherm vult; zodra de video is afgelopen (of via de noodknop) gaat het scherm vanzelf weer terug naar de normale weergave. Ook is de video-pagina steviger gemaakt: als de koppeling met Cloudflare's speler om wat voor reden dan ook niet laadt, blijft de noodknop na de bekende videolengte gewoon verschijnen (voorheen kon de pagina in dat geval vastlopen).

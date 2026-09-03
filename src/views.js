@@ -125,18 +125,27 @@ export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
   const fallbackSeconds = (durationSec && durationSec > 0 ? durationSec : 330) + 5;
   const player = streamEmbedSrc
     ? `<style>
-         /* Op iPhones (Safari) mag het scherm van een iframe niet altijd echt "fullscreen"
-            gemaakt worden via de browser zelf (een bekende beperking van Safari) — daarom
-            wordt hier zelf een schermvullende weergave gemaakt met gewone opmaak, die op
-            elk toestel werkt, in plaats van te vertrouwen op die browserfunctie alleen. */
-         #video-frame-wrap.video-fill { position:fixed; inset:0; width:100vw; height:100vh; max-width:none; z-index:9999; background:#000; border-radius:0; margin:0; }
+         /* Schermvullende weergave met gewone opmaak (werkt op elk toestel, ook iPhone) i.p.v.
+            te vertrouwen op de "fullscreen"-functie van de browser zelf, die op iPhone/Safari
+            niet altijd werkt voor een ingesloten video. Basisplaatsing staat hier, in de
+            stylesheet — bewust NIET als inline "style"-attribuut op het element, want een
+            inline stijl wint altijd van een class hieronder, ook al is "video-fill" specifieker
+            geschreven. Dat was de eigenlijke fout waardoor het eerder niet werkte: de class
+            werd wel toegevoegd, maar de inline "position:relative" op het element negeerde de
+            "position:fixed" hieronder stilzwijgend. */
+         #video-frame-wrap { position:relative; width:100%; }
+         #video-frame-wrap.video-fill {
+           position:fixed; top:0; right:0; bottom:0; left:0;
+           width:100vw; height:100vh; width:100dvw; height:100dvh;
+           max-width:none; z-index:2147483647; background:#000; border-radius:0; margin:0;
+         }
          #video-frame-wrap.video-fill #stream-player { width:100%; height:100%; aspect-ratio:auto; border-radius:0; }
          #video-frame-wrap.video-fill #start-video-button { border-radius:0; }
-         body.video-fill-lock { overflow:hidden; }
+         html.video-fill-lock, body.video-fill-lock { overflow:hidden; height:100%; }
        </style>
-       <div id="video-frame-wrap" style="position:relative;width:100%;">
+       <div id="video-frame-wrap">
          <iframe id="stream-player" src="${esc(streamEmbedSrc)}" style="width:100%;aspect-ratio:16/9;border:none;border-radius:18px;display:block;" allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>
-         <button type="button" id="start-video-button" style="position:absolute;inset:0;width:100%;height:100%;border:none;border-radius:18px;background:rgba(32,74,66,0.88);color:${COLORS.white};font-family:inherit;font-size:19px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:10px;">
+         <button type="button" id="start-video-button" style="position:absolute;top:0;right:0;bottom:0;left:0;width:100%;height:100%;border:none;border-radius:18px;background:rgba(32,74,66,0.88);color:${COLORS.white};font-family:inherit;font-size:19px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:10px;">
            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg> Start de video
          </button>
        </div>
@@ -161,9 +170,13 @@ export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
            }
 
            function enterFillScreen() {
-             // Eigen schermvullende weergave (werkt altijd, ook op iPhone/Safari).
+             // Eigen schermvullende weergave (werkt altijd, ook op iPhone/Safari). De
+             // scroll-vergrendeling gaat op zowel <html> als <body>, omdat het niet
+             // hetzelfde element is dat scrollt op elke (ingebedde) browser.
              wrapEl.classList.add('video-fill');
+             document.documentElement.classList.add('video-fill-lock');
              document.body.classList.add('video-fill-lock');
+             window.scrollTo(0, 0);
              // Daarnaast: als de browser het wél ondersteunt, ook echt "fullscreen"
              // aanvragen (verbergt op sommige toestellen ook de adresbalk). Dit is een
              // bonus, geen vereiste — als het niet lukt of niet bestaat, gebeurt er
@@ -176,6 +189,7 @@ export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
 
            function exitFillScreen() {
              wrapEl.classList.remove('video-fill');
+             document.documentElement.classList.remove('video-fill-lock');
              document.body.classList.remove('video-fill-lock');
              var exit = document.exitFullscreen || document.webkitExitFullscreen;
              if ((document.fullscreenElement || document.webkitFullscreenElement) && exit) {
