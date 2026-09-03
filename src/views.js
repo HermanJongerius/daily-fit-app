@@ -80,21 +80,21 @@ export function vandaagPage({ user, schedule, done, weekDots }) {
 
   let center;
   if (!schedule) {
-    center = `<div style="font-size:20px;font-weight:800;margin-top:16px;">Nog geen oefening gepland</div>
+    center = `<div style="font-size:20px;font-weight:800;margin-top:16px;">Nog geen oefeningen gepland</div>
       <div style="font-size:15px;font-weight:600;color:${COLORS.inkSoft};margin-top:6px;">Kom later terug, of vraag de beheerder om de planning aan te vullen.</div>`;
   } else if (done) {
     center = `<div style="width:96px;height:96px;border-radius:50%;background:${COLORS.teal100};display:flex;align-items:center;justify-content:center;">
         <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="${COLORS.teal700}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
       <div style="font-size:26px;font-weight:900;margin-top:16px;">Je hebt vandaag al bewogen!</div>
-      <div style="font-size:16px;font-weight:600;color:${COLORS.inkSoft};margin-top:8px;">Knap gedaan. Morgen staat de ${esc(tomorrowJoint.toLowerCase())}oefening klaar.</div>`;
+      <div style="font-size:16px;font-weight:600;color:${COLORS.inkSoft};margin-top:8px;">Knap gedaan. Morgen staan de ${esc(tomorrowJoint.toLowerCase())}oefeningen klaar.</div>`;
   } else if (schedule.video_status !== 'ready') {
-    center = `<div style="font-size:20px;font-weight:800;margin-top:16px;">De oefening van vandaag wordt nog klaargezet</div>
+    center = `<div style="font-size:20px;font-weight:800;margin-top:16px;">De oefeningen van vandaag worden nog klaargezet</div>
       <div style="font-size:15px;font-weight:600;color:${COLORS.inkSoft};margin-top:6px;">Probeer het over een paar minuten opnieuw.</div>`;
   } else {
     center = `<div style="font-size:15px;font-weight:700;color:${COLORS.inkSoft};text-transform:uppercase;letter-spacing:0.06em;">Vandaag</div>
-      <div style="font-size:34px;font-weight:900;color:${COLORS.teal900};margin-top:6px;">${esc(joint)}oefening</div>
+      <div style="font-size:34px;font-weight:900;color:${COLORS.teal900};margin-top:6px;">${esc(joint)}oefeningen</div>
       <a href="/video" style="margin-top:24px;display:inline-flex;align-items:center;gap:10px;height:64px;padding:0 36px;border-radius:20px;background:${COLORS.coral600};color:${COLORS.white};font-size:19px;font-weight:800;text-decoration:none;">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg> Start de oefening</a>`;
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg> Start de oefeningen</a>`;
   }
 
   const body = `
@@ -114,7 +114,7 @@ export function vandaagPage({ user, schedule, done, weekDots }) {
 
 export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
   // Bij een echte video wordt de Cloudflare Stream-speler-SDK geladen zodat we kunnen
-  // herkennen wanneer het afspelen voltooid is: pas dan telt de oefening als gedaan en
+  // herkennen wanneer het afspelen voltooid is: pas dan tellen de oefeningen als gedaan en
   // wordt automatisch naar /vandaag doorgestuurd (waar de server het al blokkeert om
   // vandaag nog een keer te kijken). Twee onafhankelijke signalen worden gebruikt, omdat
   // het "ended"-event van Cloudflare's speler-koppeling in de praktijk niet altijd
@@ -124,7 +124,12 @@ export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
   // zitten op dit scherm.
   const fallbackSeconds = (durationSec && durationSec > 0 ? durationSec : 330) + 5;
   const player = streamEmbedSrc
-    ? `<iframe id="stream-player" src="${esc(streamEmbedSrc)}" style="width:100%;aspect-ratio:16/9;border:none;border-radius:18px;" allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture;" allowfullscreen></iframe>
+    ? `<div id="video-frame-wrap" style="position:relative;width:100%;">
+         <iframe id="stream-player" src="${esc(streamEmbedSrc)}" style="width:100%;aspect-ratio:16/9;border:none;border-radius:18px;display:block;" allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>
+         <button type="button" id="start-video-button" style="position:absolute;inset:0;width:100%;height:100%;border:none;border-radius:18px;background:rgba(32,74,66,0.88);color:${COLORS.white};font-family:inherit;font-size:19px;font-weight:800;display:flex;align-items:center;justify-content:center;gap:10px;">
+           <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg> Start de video
+         </button>
+       </div>
        <div id="fallback-wrap" style="display:none;margin-top:14px;">
          <div style="font-size:13px;font-weight:700;color:${COLORS.inkSoft};margin-bottom:8px;">Video uitgekeken?</div>
          <button type="button" id="fallback-button" style="height:52px;padding:0 28px;border:none;border-radius:16px;background:${COLORS.teal700};color:${COLORS.white};font-family:inherit;font-size:15px;font-weight:800;">Ja, ga verder</button>
@@ -132,25 +137,65 @@ export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
        <script src="https://embed.cloudflarestream.com/embed/sdk.latest.js"></script>
        <script>
          (function () {
-           var player = Stream(document.getElementById('stream-player'));
+           var iframeEl = document.getElementById('stream-player');
            var done = false;
+           // De Cloudflare-koppeling zelf kan om allerlei redenen niet laden (traag netwerk,
+           // adblocker, tijdelijke storing) — dat mag het vangnet hieronder nooit blokkeren,
+           // dus dit gebeurt beschermd en de rest van de code gaat altijd door.
+           var player = null;
+           try {
+             if (typeof Stream === 'function') player = Stream(iframeEl);
+           } catch (e) {
+             player = null;
+           }
+
+           function exitFullscreenIfNeeded() {
+             var exit = document.exitFullscreen || document.webkitExitFullscreen;
+             if ((document.fullscreenElement || document.webkitFullscreenElement) && exit) {
+               try { exit.call(document); } catch (e) {}
+             }
+           }
+
            function markDone() {
              if (done) return;
              done = true;
+             exitFullscreenIfNeeded();
              fetch('/video/complete', { method: 'POST' }).then(function () {
                window.location.href = '/vandaag';
              });
            }
-           player.addEventListener('ended', markDone);
-           // Vangnet 1: sommige browsers/koppelingen laten "ended" niet altijd doorkomen,
-           // dus ook de afspeelpositie zelf checken.
-           player.addEventListener('timeupdate', function () {
-             if (player.duration && player.currentTime >= player.duration - 0.75) markDone();
-           });
-           // Vangnet 2: als er na de bekende videolengte nog niets is gebeurd, laat dan
-           // een knop zien zodat iemand niet vast blijft zitten op dit scherm.
+
+           // Groot startscherm i.p.v. automatisch afspelen: een tik hierop is de
+           // "gebruikersactie" die nodig is om zowel het geluid te mogen starten als
+           // het scherm volledig te vullen (dat mag een browser niet vanzelf doen).
+           var startButton = document.getElementById('start-video-button');
+           if (startButton) {
+             startButton.addEventListener('click', function () {
+               var requestFs = iframeEl.requestFullscreen || iframeEl.webkitRequestFullscreen;
+               if (requestFs) {
+                 try { requestFs.call(iframeEl); } catch (e) {}
+               }
+               if (player) {
+                 try { player.play(); } catch (e) {}
+               }
+               startButton.style.display = 'none';
+             });
+           }
+
+           if (player) {
+             player.addEventListener('ended', markDone);
+             // Vangnet 1: sommige browsers/koppelingen laten "ended" niet altijd doorkomen,
+             // dus ook de afspeelpositie zelf checken.
+             player.addEventListener('timeupdate', function () {
+               if (player.duration && player.currentTime >= player.duration - 0.75) markDone();
+             });
+           }
+           // Vangnet 2: staat hoe dan ook aan, ook als de speler-koppeling hierboven niet
+           // laadde — als er na de bekende videolengte nog niets is gebeurd, laat dan een
+           // knop zien zodat iemand nooit vast blijft zitten op dit scherm.
            setTimeout(function () {
              if (done) return;
+             exitFullscreenIfNeeded();
              var wrap = document.getElementById('fallback-wrap');
              if (wrap) wrap.style.display = '';
            }, ${fallbackSeconds * 1000});
@@ -162,7 +207,7 @@ export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
          Cloudflare Stream is nog niet geconfigureerd (CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN / CLOUDFLARE_STREAM_CUSTOMER_CODE ontbreken).
        </div>`;
   const devNotice = devMode
-    ? `<div style="margin-top:16px;background:#FBEDD3;color:${COLORS.amber600};padding:10px 14px;border-radius:12px;font-size:13px;font-weight:700;">Ontwikkelmodus: er is geen echte videokoppeling, dus hieronder kun je de oefening handmatig als "afgerond" markeren om de rest van de flow te testen.</div>`
+    ? `<div style="margin-top:16px;background:#FBEDD3;color:${COLORS.amber600};padding:10px 14px;border-radius:12px;font-size:13px;font-weight:700;">Ontwikkelmodus: er is geen echte videokoppeling, dus hieronder kun je de oefeningen handmatig als "afgerond" markeren om de rest van de flow te testen.</div>`
     : '';
   const devButton = devMode
     ? `<form method="post" action="/video/complete" style="margin-top:14px;"><button type="submit" style="height:52px;padding:0 28px;border:none;border-radius:16px;background:${COLORS.teal700};color:${COLORS.white};font-family:inherit;font-size:15px;font-weight:800;">(dev) Markeer als uitgekeken</button></form>`
@@ -173,12 +218,12 @@ export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
       <a href="/vandaag" style="text-decoration:none;font-size:13px;font-weight:700;color:${COLORS.inkSoft};">&larr; Terug</a>
     </div>
     <div style="max-width:520px;margin:0 auto;width:100%;padding:24px;">
-      <div style="font-size:22px;font-weight:900;margin-bottom:14px;">${esc(schedule.joint)}oefening</div>
+      <div style="font-size:22px;font-weight:900;margin-bottom:14px;">${esc(schedule.joint)}oefeningen</div>
       ${player}
       ${devNotice}${devButton}
     </div>
   </div>${demoFooter()}`;
-  return layout({ title: 'Oefening', body });
+  return layout({ title: 'Oefeningen', body });
 }
 
 export function errorPage() {
@@ -244,7 +289,7 @@ export function planningPage({ days, cfConfigured }) {
     <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border:1px solid ${COLORS.border};border-radius:14px;background:${COLORS.white};margin-bottom:10px;">
       <div>
         <div style="font-size:13px;font-weight:700;color:${COLORS.inkSoft};">${fmtDateLong(d.date)}</div>
-        <div style="font-size:16px;font-weight:800;">${esc(d.joint)}oefening ${videoStatusBadge(d.video_status)}</div>
+        <div style="font-size:16px;font-weight:800;">${esc(d.joint)}oefeningen ${videoStatusBadge(d.video_status)}</div>
         <div style="font-size:12px;color:${COLORS.inkSoft};margin-top:2px;">${d.video_label ? esc(d.video_label) : 'nog geen video geüpload'}</div>
       </div>
       <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">

@@ -2,6 +2,9 @@
 // Vaste kalendercyclus, zoals besloten: ma=Nek, di=Schouders, wo=Ellebogen, do=Rug, vr=Heup, za=Knie, zo=Enkels.
 export const JOINTS_BY_WEEKDAY = ['Enkels', 'Nek', 'Schouders', 'Ellebogen', 'Rug', 'Heup', 'Knie']; // 0=zo..6=za (JS getDay())
 
+// Eerste letter van elke dag, voor de week-voortgangsbolletjes (ma=M, di=D, wo=W, do=D, vr=V, za=Z, zo=Z).
+export const DAY_LETTERS_BY_WEEKDAY = ['Z', 'M', 'D', 'W', 'D', 'V', 'Z']; // 0=zo..6=za (JS getDay())
+
 export function jointForDate(d) {
   return JOINTS_BY_WEEKDAY[d.getDay()];
 }

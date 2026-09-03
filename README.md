@@ -1,6 +1,19 @@
-# DailyFit — echte applicatie (eerste versie)
+# DailyFit — echte applicatie
+
+**Huidige versie: 1.3.0** (zie ook `version` in `package.json` — deze twee horen altijd gelijk te zijn).
 
 Dit is de echte, werkende opvolger van de klikbare demo: een Node.js-webapplicatie met een PostgreSQL-database, gebouwd volgens `technisch-ontwerp.md` in het DailyFit-project. Alles hieronder is getest en werkt lokaal; wat nog moet gebeuren staat onderaan.
+
+## Wijzigingen (changelog)
+Bij elke wijziging aan de code wordt hier een nieuwe regel toegevoegd én het versienummer hierboven (en in `package.json`) opgehoogd. Zo is in één oogopslag te zien welke versie waar draait (test vs. live) en wat er precies is veranderd — dat voorkomt dat een fout ergens onopgemerkt blijft hangen.
+
+- **1.3.0** (3 sep 2026) — De video speelt nu op het hele scherm af: op de video-pagina verschijnt een grote "Start de video"-knop, die zowel het afspelen start als het scherm vult; zodra de video is afgelopen (of via de noodknop) gaat het scherm vanzelf weer terug naar de normale weergave. Ook is de video-pagina steviger gemaakt: als de koppeling met Cloudflare's speler om wat voor reden dan ook niet laadt, blijft de noodknop na de bekende videolengte gewoon verschijnen (voorheen kon de pagina in dat geval vastlopen).
+- **1.2.0** (3 sep 2026) — Teksten aangepast naar meervoud ("Rugoefeningen" i.p.v. "Rugoefening", "Start de oefeningen", enz.); de 7 voortgangsbolletjes op het senior-scherm tonen nu de eerste letter van de dag (M/D/W/D/V/Z/Z) in plaats van lege bolletjes.
+- **1.1.0** (3 sep 2026) — Nieuw logo (het "D"-icoon) doorgevoerd; naam overal gewijzigd van "Daily Fit" naar "DailyFit" (aan elkaar), in de app én in alle bestandsnamen/teksten.
+- **1.0.3** (± sep 2026) — Eerste poging om te zorgen dat een video maar 1x per dag afgespeeld kan worden: koppeling met de Cloudflare-videospeler zelf (detecteert het einde van de video), met een extra vangnet-knop als dat niet lukt. Bevestigd door de gebruiker dat dit nog niet volledig werkt — dit staat open.
+- **1.0.2** — Video's die vastliepen op de status "Wordt verwerkt" worden nu automatisch ververst zodra het planningsscherm wordt geopend, in plaats van daar handmatig op te moeten wachten.
+- **1.0.1** — Fix voor "Internal Server Error" bij het inloggen op Railway (de interne verbinding met de database had geen SSL nodig, maar de app vroeg dat toch af).
+- **1.0.0** — Eerste werkende versie: inloggen (senior + beheerder), planningscherm, gebruikersbeheer, koppeling met Cloudflare Stream voor video-upload en beveiligd afspelen.
 
 ## Wat er nu al werkt
 - Inloggen: senior met gebruikersnaam + mobiel nummer (spaties/streepjes worden genegeerd), beheerder met gebruikersnaam + wachtwoord (veilig gehasht, nooit in platte tekst opgeslagen).
@@ -46,7 +59,11 @@ Zet deze drie waarden in `.env` (lokaal) of als omgevingsvariabelen op Railway (
 Een eenvoudigere, stap-voor-stap versie van dit hoofdstuk (zonder terminal-commando's, met screenshots-in-woorden) staat in het DailyFit-project als `railway-en-cloudflare-simpel.md`.
 
 ## Wat nog moet gebeuren
-- Dit is nog niet naar Railway gedeployed — dat is de volgende stap zodra je zover bent.
-- De video-upload en het afspelen zijn geschreven volgens Cloudflare's documentatie, maar nog niet getest met een echt Cloudflare-account (daar was in deze sessie geen toegang toe). Eerste keer uitproberen met een echte video verdient extra aandacht.
+- De video mag nu nog vaker dan 1x per dag bekeken worden in sommige gevallen — de koppeling met de Cloudflare-speler werkt nog niet volledig betrouwbaar. Dit staat open om verder uit te zoeken.
+- De video-upload en het afspelen zijn geschreven volgens Cloudflare's documentatie, maar nog niet uitgebreid getest met echte (lange) video's in de praktijk. Eerste keer uitproberen met een echte video verdient extra aandacht.
 - Er is geen automatische e-mail/sms-melding als een video nog "wordt verwerkt" blijft hangen — de beheerder ziet dat nu alleen visueel in het planningsscherm.
 - Wachtwoord/telefoonnummer kwijt: de beheerder corrigeert dit nu via het scherm "Gebruikers" (geen aparte "wachtwoord vergeten"-flow nodig, zoals afgesproken).
+- Een redirect van het kale domein `mijndailyfit.nl` naar `www.mijndailyfit.nl` staat nog niet ingesteld (optioneel, kan later).
+
+## Werkwijze: testen vóór live
+Nieuwe wijzigingen gaan altijd eerst naar de `test`-branch op GitHub, worden gecontroleerd op de aparte testomgeving (oefenversie) op Railway, en pas daarna via een pull request naar `main` (de live omgeving) gebracht. Zie `oefenversie-en-live-versie.md` in het DailyFit-project voor de volledige stappen.

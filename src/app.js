@@ -6,7 +6,7 @@ import {
   clearFailedAttempts, createSession, destroySession, userForSessionToken,
   sessionCookieOptions, SESSION_COOKIE, isExpired,
 } from './auth.js';
-import { jointForDate, isoDateLocal, todayIso, JOINTS_BY_WEEKDAY } from './helpers.js';
+import { jointForDate, isoDateLocal, todayIso, JOINTS_BY_WEEKDAY, DAY_LETTERS_BY_WEEKDAY } from './helpers.js';
 import { createDirectUploadUrl, getVideoStatus, createSignedPlaybackToken } from './cloudflareStream.js';
 import * as views from './views.js';
 
@@ -109,7 +109,9 @@ app.get('/vandaag', requireRole('senior'), async (req, res) => {
   for (let i = 6; i >= 0; i--) {
     const d = new Date(Date.now() - i * 86400000);
     const iso = isoDateLocal(d);
-    dots.push(`<span title="${iso}" style="display:inline-block;width:10px;height:10px;border-radius:50%;margin:0 3px;background:${doneDates.has(iso) ? '#3A6B60' : '#E7DFCF'};"></span>`);
+    const isDone = doneDates.has(iso);
+    const letter = DAY_LETTERS_BY_WEEKDAY[d.getDay()];
+    dots.push(`<span title="${iso}" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;margin:0 3px;font-size:11px;font-weight:800;background:${isDone ? '#3A6B60' : '#E7DFCF'};color:${isDone ? '#FBF6EC' : '#746C5F'};">${letter}</span>`);
   }
 
   res.send(views.vandaagPage({ user: req.user, schedule, done, weekDots: dots.join('') }));
