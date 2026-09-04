@@ -1,4 +1,4 @@
-import { esc, fmtDateLong, jointForDate, JOINTS_BY_WEEKDAY, APP_VERSION } from './helpers.js';
+import { esc, fmtDateLong, jointForDate, JOINTS_BY_WEEKDAY, APP_VERSION, isoDateLocal, todayIso } from './helpers.js';
 
 // Merkstijl, overgenomen uit de schets en de demo.
 const COLORS = {
@@ -202,8 +202,13 @@ export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
              if (done) return;
              done = true;
              exitFillScreen();
-             fetch('/video/complete', { method: 'POST' }).then(function () {
-               window.location.href = '/vandaag';
+             // Ga naar waar de server ons na het registreren van de training heen stuurt
+             // (het voortgangsscherm, /voortgang) — niet naar een vast adres hier in de
+             // code. "fetch" volgt een server-redirect vanzelf en "response.url" is dan al
+             // het eindadres; alleen als dat om wat voor reden dan ook ontbreekt, valt dit
+             // terug op /voortgang zelf.
+             fetch('/video/complete', { method: 'POST' }).then(function (response) {
+               window.location.href = response.url || '/voortgang';
              });
            }
 
@@ -446,7 +451,9 @@ export function planningPage({ days, cfConfigured }) {
 function paidStatusBadge(u) {
   if (u.role === 'admin') return '';
   if (!u.paid_until) return `<span style="background:#FBEDD3;color:${COLORS.amber600};padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800;">Geen betaaldatum</span>`;
-  const expired = new Date(u.paid_until) < new Date(new Date().setHours(0, 0, 0, 0));
+  // Vergelijk als kalenderdatums (Nederlandse tijd), niet als momenten in de tijdzone van de
+  // server zelf — zie de toelichting bij APP_TIMEZONE in helpers.js.
+  const expired = isoDateLocal(u.paid_until) < todayIso();
   return expired
     ? `<span style="background:#FBEDD3;color:${COLORS.amber600};padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800;">Verlopen sinds ${fmtDateLong(u.paid_until)}</span>`
     : `<span style="background:${COLORS.teal100};color:${COLORS.teal900};padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800;">Actief tot ${fmtDateLong(u.paid_until)}</span>`;

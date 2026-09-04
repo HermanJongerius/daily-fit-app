@@ -1,8 +1,10 @@
+import { writeFileSync } from 'node:fs';
 import pkg from '/home/claude/.npm-global/lib/node_modules/playwright/index.js';
 const { chromium } = pkg;
-import { JOINTS_BY_WEEKDAY } from './src/helpers.js';
+import { JOINTS_BY_WEEKDAY, weekdayInAppTz } from './src/helpers.js';
+import * as views from './src/views.js';
 
-const expectedJointToday = JOINTS_BY_WEEKDAY[new Date().getDay()];
+const expectedJointToday = JOINTS_BY_WEEKDAY[weekdayInAppTz()];
 
 function assert(cond, msg) {
   if (!cond) throw new Error('ASSERTION FAILED: ' + msg);
@@ -126,6 +128,42 @@ await page.click('button[type="submit"]');
 await page.waitForLoadState('networkidle');
 text = await page.textContent('body');
 assert(text.includes('Te veel mislukte pogingen'), 'na 5 mislukte pogingen wordt het account tijdelijk vergrendeld, ook met het juiste nummer');
+
+// --- video-pagina met een échte (niet-ontwikkelmodus) videokoppeling: na afloop moet de
+// browser naar /voortgang gaan (het beloningsscherm), niet naar een vast adres in de code.
+// Dit pad wordt hierboven niet gedekt: zonder Cloudflare-instellingen draait de app altijd
+// in ontwikkelmodus (het gewone HTML-formulier), terwijl een échte video via JavaScript
+// (fetch + "Video uitgekeken?"-knop) afgehandeld wordt. Render daarom hier los de
+// video-pagina met een neptoken, zodat dat JavaScript-pad ook automatisch gecontroleerd
+// wordt — dit ving eerder een echte fout op (een vast adres i.p.v. het serveradres volgen).
+{
+  const html = views.videoPage({
+    schedule: { joint: 'Heup' },
+    streamEmbedSrc: 'https://example.invalid/fake/iframe',
+    devMode: false,
+    durationSec: 1, // korte wachttijd, zodat de noodknop snel verschijnt in de test
+  });
+  writeFileSync('/tmp/_browsertest_video_redirect.html', html);
+
+  const videoPage2 = await browser.newPage();
+  let attemptedNavigation = null;
+  videoPage2.on('requestfailed', (req) => { if (req.isNavigationRequest()) attemptedNavigation = req.url(); });
+  videoPage2.on('framenavigated', (frame) => { attemptedNavigation = attemptedNavigation || frame.url(); });
+  // Doet zich voor als het antwoord van de server op POST /video/complete: een fetch die
+  // (na het volgen van de 302-redirect) eindigt op /voortgang.
+  await videoPage2.addInitScript(() => {
+    window.fetch = () => Promise.resolve({ url: 'https://example.invalid/voortgang', ok: true });
+  });
+  await videoPage2.goto('file:///tmp/_browsertest_video_redirect.html');
+  await videoPage2.waitForSelector('#fallback-button', { state: 'visible', timeout: 10000 });
+  await videoPage2.click('#fallback-button');
+  await videoPage2.waitForTimeout(1500);
+  assert(
+    !!attemptedNavigation && attemptedNavigation.includes('/voortgang'),
+    'na een échte (niet-ontwikkelmodus) video gaat de browser naar /voortgang (het beloningsscherm), niet naar een vast adres'
+  );
+  await videoPage2.close();
+}
 
 await browser.close();
 console.log('\nAlle controles op de echte applicatie zijn geslaagd.');

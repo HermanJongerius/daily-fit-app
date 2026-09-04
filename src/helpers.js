@@ -6,6 +6,15 @@ import { dirname, join } from 'node:path';
 // Vaste kalendercyclus, zoals besloten: ma=Nek, di=Schouders, wo=Ellebogen, do=Rug, vr=Heup, za=Knie, zo=Enkels.
 export const JOINTS_BY_WEEKDAY = ['Enkels', 'Nek', 'Schouders', 'Ellebogen', 'Rug', 'Heup', 'Knie']; // 0=zo..6=za (JS getDay())
 
+// Alle "welke dag is het vandaag"-berekeningen in de app gaan uit van de Nederlandse klok
+// (Europe/Amsterdam), NIET van de tijdzone waarin de server zelf draait. Railway (en deze
+// ontwikkelomgeving) draait standaard op UTC, en Nederland loopt daar het hele jaar 1 of 2 uur
+// op voor (CET/CEST). Zonder deze correctie zou een training die vlak na Nederlandse middernacht
+// wordt gedaan (bijv. 00:30 's nachts) door de server nog als "gisteren" geregistreerd worden,
+// omdat het in UTC op dat moment nog niet middernacht is — met als zichtbaar gevolg dat het
+// verkeerde dagbolletje oplicht op het scherm "Vandaag".
+const APP_TIMEZONE = 'Europe/Amsterdam';
+
 // Versienummer rechtstreeks uit package.json gelezen (één bron van waarheid, altijd gelijk
 // aan wat er in package.json/README.md staat) — wordt onderaan elke pagina getoond, zodat
 // altijd te zien is naar welke versie (test of live) je op dat moment kijkt.
@@ -16,13 +25,29 @@ export const APP_VERSION = JSON.parse(readFileSync(join(__dirname, '..', 'packag
 export const DAY_LETTERS_BY_WEEKDAY = ['Z', 'M', 'D', 'W', 'D', 'V', 'Z']; // 0=zo..6=za (JS getDay())
 
 export function jointForDate(d) {
-  return JOINTS_BY_WEEKDAY[d.getDay()];
+  return JOINTS_BY_WEEKDAY[weekdayInAppTz(d)];
 }
 
+// Geeft de kalenderdatum (YYYY-MM-DD) van een moment terug zoals die is in Nederlandse tijd,
+// ongeacht de tijdzone van de server zelf. Zie toelichting bij APP_TIMEZONE hierboven.
 export function isoDateLocal(d) {
-  const t = new Date(d);
-  t.setMinutes(t.getMinutes() - t.getTimezoneOffset());
-  return t.toISOString().slice(0, 10);
+  const date = d instanceof Date ? d : new Date(d);
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: APP_TIMEZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).formatToParts(date);
+  const get = (type) => parts.find((p) => p.type === type).value;
+  return `${get('year')}-${get('month')}-${get('day')}`;
+}
+
+// Weekdag (0=zo..6=za, zoals JS' eigen getDay()) van een moment, in Nederlandse tijd.
+export function weekdayInAppTz(d = new Date()) {
+  const date = d instanceof Date ? d : new Date(d);
+  const weekday = new Intl.DateTimeFormat('en-US', { timeZone: APP_TIMEZONE, weekday: 'short' }).format(date);
+  const map = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
+  return map[weekday];
 }
 
 export function todayIso() {

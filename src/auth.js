@@ -1,6 +1,7 @@
 import crypto from 'crypto';
 import bcrypt from 'bcryptjs';
 import { pool } from './db.js';
+import { isoDateLocal, todayIso } from './helpers.js';
 
 // --- telefoonnummer-normalisatie (senior-login) ---
 // Tolerant voor spaties, streepjes, haakjes en +31/0031-notatie, zodat "06 12 34 56 78",
@@ -89,7 +90,7 @@ export { SESSION_COOKIE };
 export function isExpired(user) {
   if (user.role === 'admin') return false;
   if (!user.paid_until) return true;
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  return new Date(user.paid_until) < today;
+  // Vergelijk als kalenderdatums (Nederlandse tijd), niet als momenten in de tijdzone van de
+  // server zelf — zie de toelichting bij APP_TIMEZONE in helpers.js.
+  return isoDateLocal(user.paid_until) < todayIso();
 }

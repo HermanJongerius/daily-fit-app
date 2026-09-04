@@ -6,7 +6,7 @@ import {
   clearFailedAttempts, createSession, destroySession, userForSessionToken,
   sessionCookieOptions, SESSION_COOKIE, isExpired,
 } from './auth.js';
-import { jointForDate, isoDateLocal, todayIso, JOINTS_BY_WEEKDAY, DAY_LETTERS_BY_WEEKDAY, cycleInfoForUser, daysPossibleSince } from './helpers.js';
+import { jointForDate, isoDateLocal, todayIso, weekdayInAppTz, JOINTS_BY_WEEKDAY, DAY_LETTERS_BY_WEEKDAY, cycleInfoForUser, daysPossibleSince } from './helpers.js';
 import { createDirectUploadUrl, getVideoStatus, createSignedPlaybackToken } from './cloudflareStream.js';
 import * as views from './views.js';
 
@@ -101,7 +101,9 @@ app.get('/vandaag', requireRole('senior'), async (req, res) => {
 
   // voortgang van de huidige week (altijd maandag t/m zondag, in die volgorde), voor de
   // puntjes-weergave — niet de laatste 7 dagen teruggerekend vanaf vandaag.
-  const dayOfWeek = new Date().getDay(); // 0=zo..6=za (JS getDay())
+  // Let op: dit gaat uit van de Nederlandse dag/weekdag (weekdayInAppTz), niet van de
+  // tijdzone van de server zelf — anders kan hier het verkeerde dagbolletje oplichten.
+  const dayOfWeek = weekdayInAppTz(); // 0=zo..6=za (JS getDay())
   const daysSinceMonday = (dayOfWeek + 6) % 7; // ma=0 .. zo=6
   const monday = new Date(Date.now() - daysSinceMonday * 86400000);
   const { rows: recentRows } = await pool.query(
@@ -114,7 +116,7 @@ app.get('/vandaag', requireRole('senior'), async (req, res) => {
     const d = new Date(monday.getTime() + i * 86400000);
     const iso = isoDateLocal(d);
     const isDone = doneDates.has(iso);
-    const letter = DAY_LETTERS_BY_WEEKDAY[d.getDay()];
+    const letter = DAY_LETTERS_BY_WEEKDAY[weekdayInAppTz(d)];
     dots.push(`<span title="${iso}" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;margin:0 3px;font-size:11px;font-weight:800;background:${isDone ? '#3A6B60' : '#E7DFCF'};color:${isDone ? '#FBF6EC' : '#746C5F'};">${letter}</span>`);
   }
 
@@ -171,8 +173,9 @@ app.get('/voortgang', requireRole('senior'), async (req, res) => {
 
 // --- beheerder: planning ---
 app.get('/admin/planning', requireRole('admin'), async (req, res) => {
-  const start = new Date();
-  start.setHours(0, 0, 0, 0);
+  // Start bij "vandaag" volgens de Nederlandse klok (todayIso), niet volgens de tijdzone
+  // van de server zelf — zie de toelichting bij APP_TIMEZONE in helpers.js.
+  const start = new Date(todayIso() + 'T00:00:00');
   const days = [];
   for (let i = 0; i < 14; i++) {
     const d = new Date(start.getTime() + i * 86400000);
