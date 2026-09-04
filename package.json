@@ -1,6 +1,6 @@
 {
   "name": "daily-fit-app",
-  "version": "1.4.1",
+  "version": "1.6.0",
   "description": "DailyFit — bewegingsplatform voor ouderen",
   "main": "server.js",
   "type": "module",

@@ -6,7 +6,7 @@ import {
   clearFailedAttempts, createSession, destroySession, userForSessionToken,
   sessionCookieOptions, SESSION_COOKIE, isExpired,
 } from './auth.js';
-import { jointForDate, isoDateLocal, todayIso, JOINTS_BY_WEEKDAY, DAY_LETTERS_BY_WEEKDAY } from './helpers.js';
+import { jointForDate, isoDateLocal, todayIso, JOINTS_BY_WEEKDAY, DAY_LETTERS_BY_WEEKDAY, cycleInfoForUser, daysPossibleSince } from './helpers.js';
 import { createDirectUploadUrl, getVideoStatus, createSignedPlaybackToken } from './cloudflareStream.js';
 import * as views from './views.js';
 
@@ -153,7 +153,20 @@ app.post('/video/complete', requireRole('senior'), async (req, res) => {
     'INSERT INTO completions (user_id, date) VALUES ($1, $2) ON CONFLICT (user_id, date) DO NOTHING',
     [req.user.id, today]
   );
-  res.redirect('/vandaag');
+  res.redirect('/voortgang');
+});
+
+// --- voortgangsscherm (het "onthullingsscherm"): verschijnt na elke training, toont de
+// persoonlijke 7-daagse cyclus als een plaatje dat vakje voor vakje onthuld wordt ---
+app.get('/voortgang', requireRole('senior'), async (req, res) => {
+  const today = todayIso();
+  const { dayInCycle, cycleStartIso, cycleEndIso } = cycleInfoForUser(req.user.created_at, today);
+  const { rows } = await pool.query(
+    'SELECT COUNT(*)::int AS n FROM completions WHERE user_id = $1 AND date >= $2::date AND date <= $3::date',
+    [req.user.id, cycleStartIso, cycleEndIso]
+  );
+  const blocksRevealed = Math.min(7, rows[0].n);
+  res.send(views.voortgangPage({ dayInCycle, blocksRevealed }));
 });
 
 // --- beheerder: planning ---
@@ -230,9 +243,29 @@ app.post('/admin/planning/:date/attach', requireRole('admin'), async (req, res) 
 });
 
 // --- beheerder: gebruikers ---
-app.get('/admin/gebruikers', requireRole('admin'), async (req, res) => {
+// Haalt alle gebruikers op, plus per senior hoevaak ze in totaal getraind hebben en
+// hoeveel procent dat is van het aantal dagen dat ze hadden kúnnen trainen (vanaf de
+// dag van aanmelden tot en met vandaag). Beheerders trainen niet, dus die krijgen geen
+// trainingsstatistiek.
+async function loadUsersWithStats() {
   const { rows } = await pool.query('SELECT * FROM users ORDER BY role DESC, display_name');
-  res.send(views.usersPage({ users: rows, error: null }));
+  const { rows: completionCounts } = await pool.query(
+    'SELECT user_id, COUNT(*)::int AS n FROM completions GROUP BY user_id'
+  );
+  const countByUser = new Map(completionCounts.map((r) => [r.user_id, r.n]));
+  const today = todayIso();
+  return rows.map((u) => {
+    if (u.role !== 'senior') return u;
+    const completed = countByUser.get(u.id) || 0;
+    const possible = daysPossibleSince(u.created_at, today);
+    const percent = possible > 0 ? Math.round((completed / possible) * 100) : 0;
+    return { ...u, trainingStats: { completed, possible, percent } };
+  });
+}
+
+app.get('/admin/gebruikers', requireRole('admin'), async (req, res) => {
+  const users = await loadUsersWithStats();
+  res.send(views.usersPage({ users, error: null }));
 });
 
 app.post('/admin/gebruikers', requireRole('admin'), async (req, res) => {
@@ -244,8 +277,8 @@ app.post('/admin/gebruikers', requireRole('admin'), async (req, res) => {
   const paidUntil = req.body.paidUntil || null;
 
   const fail = async (error) => {
-    const { rows } = await pool.query('SELECT * FROM users ORDER BY role DESC, display_name');
-    res.status(400).send(views.usersPage({ users: rows, error }));
+    const users = await loadUsersWithStats();
+    res.status(400).send(views.usersPage({ users, error }));
   };
 
   if (!username) return fail('Vul een gebruikersnaam in.');

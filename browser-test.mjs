@@ -43,8 +43,12 @@ text = await page.textContent('body');
 assert(text.includes('Ontwikkelmodus'), 'zonder Cloudflare-configuratie verschijnt de ontwikkelmodus-notitie');
 await page.click('button[type="submit"]');
 await page.waitForLoadState('networkidle');
+assert(page.url().endsWith('/voortgang'), 'na het markeren als uitgekeken verschijnt eerst het voortgangsscherm (cyclus-onthulling)');
 text = await page.textContent('body');
-assert(text.includes('al bewogen'), 'na het markeren als uitgekeken toont /vandaag de "al bewogen"-status');
+assert(text.includes('vakje') || text.includes('Compleet') || text.includes('Trots op je') || text.includes('Lekker bezig'), 'voortgangsscherm toont de cyclus-onthulling of een van de eindteksten');
+await page.goto(BASE + '/vandaag');
+text = await page.textContent('body');
+assert(text.includes('al bewogen'), 'na het voortgangsscherm toont /vandaag de "al bewogen"-status');
 
 // --- serverkant afgedwongen daglimiet: rechtstreeks naar /video mag niet nog een keer tellen ---
 await page.goto(BASE + '/video');

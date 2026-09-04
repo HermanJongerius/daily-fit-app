@@ -38,6 +38,34 @@ export function fmtDateLong(iso) {
   return `${parseInt(d, 10)} ${MONTHS[parseInt(m, 10) - 1]} ${y}`;
 }
 
+// Persoonlijke 7-daagse trainingscyclus, voor het "onthullingsscherm" na de oefening.
+// De cyclus start op de dag dat het account is aangemaakt (created_at) en loopt daarna
+// steeds door in blokken van 7 kalenderdagen — onafhankelijk van maandag/zondag, en
+// onafhankelijk per deelnemer (iedereen heeft zijn eigen start- en cyclusdagen).
+// Geeft terug: dayInCycle (1 t/m 7, dag 7 = laatste dag van de cyclus) en de
+// begin-/einddatum (iso-strings) van de cyclus waar "todayIsoStr" in valt.
+export function cycleInfoForUser(createdAt, todayIsoStr) {
+  const anchorIso = isoDateLocal(createdAt);
+  const anchor = new Date(anchorIso + 'T00:00:00');
+  const today = new Date(todayIsoStr + 'T00:00:00');
+  const daysSinceAnchor = Math.max(0, Math.round((today - anchor) / 86400000));
+  const dayInCycle = (daysSinceAnchor % 7) + 1; // 1..7
+  const cycleStart = new Date(anchor.getTime() + (daysSinceAnchor - (dayInCycle - 1)) * 86400000);
+  const cycleEnd = new Date(cycleStart.getTime() + 6 * 86400000);
+  return { dayInCycle, cycleStartIso: isoDateLocal(cycleStart), cycleEndIso: isoDateLocal(cycleEnd) };
+}
+
+// Aantal dagen dat een deelnemer had kúnnen trainen: vanaf de dag van aanmelden
+// (created_at) tot en met vandaag. Gebruikt voor het trainingspercentage in het
+// beheerdersoverzicht ("X keer getraind van de Y mogelijke dagen").
+export function daysPossibleSince(createdAt, todayIsoStr) {
+  const anchorIso = isoDateLocal(createdAt);
+  const anchor = new Date(anchorIso + 'T00:00:00');
+  const today = new Date(todayIsoStr + 'T00:00:00');
+  const days = Math.max(0, Math.round((today - anchor) / 86400000));
+  return days + 1; // inclusief vandaag
+}
+
 export function esc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;')

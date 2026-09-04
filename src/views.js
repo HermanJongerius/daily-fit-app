@@ -21,7 +21,7 @@ function logoMark(size = 40) {
   </div>`;
 }
 
-function layout({ title, body, headerRight = '' }) {
+function layout({ title, body, headerRight = '', extraHead = '' }) {
   return `<!doctype html>
 <html lang="nl">
 <head>
@@ -38,6 +38,7 @@ function layout({ title, body, headerRight = '' }) {
   input:focus,select:focus{border-color:${COLORS.teal700} !important;}
   a{color:inherit;}
 </style>
+${extraHead}
 </head>
 <body>
 ${body}
@@ -264,6 +265,69 @@ export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
   return layout({ title: 'Oefeningen', body });
 }
 
+// Het "onthullingsscherm": verschijnt na elke training. Toont de persoonlijke 7-daagse
+// cyclus (los van de kalenderweek) als een plaatje met 7 vakjes erover — elke training
+// laat er één verdwijnen. Op de 7e/laatste dag van de cyclus verschijnt in plaats van de
+// korte aanmoediging één van de drie eindteksten, afhankelijk van hoeveel van de 7
+// trainingen zijn gelukt. Na 5 seconden gaat het vanzelf terug naar "Vandaag" (met een
+// knop ernaast voor wie liever zelf doorgaat).
+export function voortgangPage({ dayInCycle, blocksRevealed }) {
+  const totalBlocks = 7;
+  const isLastDay = dayInCycle === totalBlocks;
+
+  let messageTitle;
+  let messageBody;
+  if (isLastDay) {
+    if (blocksRevealed === 7) {
+      messageTitle = 'Compleet!';
+      messageBody = 'Super gedaan! Je hebt deze week al je gewrichten en spieren er omheen aandacht gegeven.';
+    } else if (blocksRevealed >= 4) {
+      messageTitle = 'Trots op je';
+      messageBody = 'Ik ben trots op je. Je was deze week lekker op weg. Volgende week een nieuwe kans om 7 trainingen achter elkaar te doen.';
+    } else {
+      messageTitle = 'Lekker bezig';
+      messageBody = 'Je bent lekker bezig! Probeer een vast moment van de dag in te plannen om je gewrichten en spieren wat aandacht te geven.';
+    }
+  } else {
+    const remaining = totalBlocks - blocksRevealed;
+    messageTitle = `Dag ${dayInCycle} van 7`;
+    messageBody = remaining === 1 ? 'Nog 1 vakje te gaan voor je beloning!' : `Nog ${remaining} vakjes te gaan voor je beloning!`;
+  }
+
+  let blocksHtml = '';
+  for (let i = 0; i < totalBlocks; i++) {
+    const covered = i >= blocksRevealed;
+    blocksHtml += `<div style="flex:1;background:${COLORS.teal900};opacity:${covered ? 1 : 0};${i > 0 ? `border-left:2px solid ${COLORS.cream};` : ''}"></div>`;
+  }
+
+  // Tijdelijke plaatsvervanger totdat er een eigen foto/afbeelding is aangeleverd — zelf
+  // getekend in de bestaande huisstijlkleuren (teal/koraal/crème), zodat het geheel er nu
+  // al compleet uitziet en straks zonder codewijziging vervangen kan worden door een
+  // echte foto (gewoon de src van de afbeelding aanpassen).
+  const placeholderImage = `<svg viewBox="0 0 400 300" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" style="display:block;">
+    <rect width="400" height="300" fill="${COLORS.teal100}"/>
+    <circle cx="200" cy="110" r="55" fill="${COLORS.coral600}"/>
+    <path d="M0,220 Q100,165 200,210 T400,195 V300 H0 Z" fill="${COLORS.teal700}"/>
+    <path d="M0,260 Q120,215 240,250 T400,240 V300 H0 Z" fill="${COLORS.teal900}"/>
+  </svg>`;
+
+  const body = `
+  <div style="min-height:100vh;display:flex;flex-direction:column;background:${COLORS.cream};padding-bottom:64px;">
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;max-width:420px;margin:0 auto;width:100%;">
+      <div style="font-size:15px;font-weight:700;color:${COLORS.inkSoft};text-transform:uppercase;letter-spacing:0.06em;">Jouw cyclus</div>
+      <div style="width:100%;aspect-ratio:4/3;border-radius:20px;overflow:hidden;position:relative;margin-top:14px;box-shadow:0 2px 10px rgba(0,0,0,0.08);">
+        <div style="position:absolute;top:0;right:0;bottom:0;left:0;">${placeholderImage}</div>
+        <div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;">${blocksHtml}</div>
+      </div>
+      <div style="font-size:22px;font-weight:900;margin-top:24px;color:${COLORS.teal900};">${esc(messageTitle)}</div>
+      <div style="font-size:17px;font-weight:600;color:${COLORS.inkSoft};margin-top:10px;line-height:1.5;">${esc(messageBody)}</div>
+      <a href="/vandaag" style="margin-top:26px;display:inline-flex;align-items:center;justify-content:center;height:52px;padding:0 30px;border-radius:16px;background:${COLORS.teal700};color:${COLORS.white};font-size:15px;font-weight:800;text-decoration:none;">Verder</a>
+    </div>
+  </div>${demoFooter()}`;
+
+  return layout({ title: 'Jouw voortgang', body, extraHead: '<meta http-equiv="refresh" content="5;url=/vandaag">' });
+}
+
 export function errorPage() {
   const body = `
   <div style="min-height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:${COLORS.cream};padding:24px;">
@@ -388,6 +452,15 @@ function paidStatusBadge(u) {
     : `<span style="background:${COLORS.teal100};color:${COLORS.teal900};padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800;">Actief tot ${fmtDateLong(u.paid_until)}</span>`;
 }
 
+// Toont per senior hoevaak in totaal getraind is, en welk percentage dat is van het
+// aantal dagen dat diegene had kúnnen trainen (vanaf aanmelden tot en met vandaag).
+function trainingStatsLine(u) {
+  if (u.role === 'admin' || !u.trainingStats) return '';
+  const { completed, possible, percent } = u.trainingStats;
+  const dagenWoord = possible === 1 ? 'dag' : 'dagen';
+  return `<div style="font-size:12px;font-weight:700;color:${COLORS.teal900};margin-top:4px;">${completed}x getraind &middot; ${percent}% (van ${possible} ${dagenWoord} sinds aanmelden)</div>`;
+}
+
 export function usersPage({ users, error }) {
   const rows = users.map((u) => `
     <div style="padding:14px 16px;border:1px solid ${COLORS.border};border-radius:14px;background:${COLORS.white};margin-bottom:10px;">
@@ -396,6 +469,7 @@ export function usersPage({ users, error }) {
           <div style="font-size:15px;font-weight:800;">${esc(u.display_name)}</div>
           <div style="font-size:12px;font-weight:600;color:${COLORS.inkSoft};">@${esc(u.username)}${u.role !== 'admin' && u.phone_display ? ' &middot; ' + esc(u.phone_display) : ''}</div>
           ${paidStatusBadge(u)}
+          ${trainingStatsLine(u)}
         </div>
         <div style="background:${u.role === 'admin' ? COLORS.teal100 : '#FBEDD3'};color:${u.role === 'admin' ? COLORS.teal900 : COLORS.amber600};padding:4px 10px;border-radius:999px;font-size:11px;font-weight:800;">${u.role === 'admin' ? 'Beheerder' : 'Senior'}</div>
       </div>
