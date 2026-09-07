@@ -160,16 +160,59 @@ app.post('/video/complete', requireRole('senior'), async (req, res) => {
 });
 
 // --- voortgangsscherm (het "onthullingsscherm"): verschijnt na elke training, toont de
-// persoonlijke 7-daagse cyclus als een plaatje dat vakje voor vakje onthuld wordt ---
+// persoonlijke 7-daagse cyclus als een plaatje dat vakje voor vakje onthuld wordt. Bij een
+// volledig afgeronde cyclus (7 van de 7 dagen) wordt bovendien — als er één beschikbaar is
+// — een informatie-video ontgrendeld, op volgorde (zie /admin/videos hieronder). ---
 app.get('/voortgang', requireRole('senior'), async (req, res) => {
   const today = todayIso();
-  const { dayInCycle, cycleStartIso, cycleEndIso } = cycleInfoForUser(req.user.created_at, today);
+  const { dayInCycle, cycleStartIso, cycleEndIso, anchorIso } = cycleInfoForUser(req.user.created_at, today);
   const { rows } = await pool.query(
     'SELECT COUNT(*)::int AS n FROM completions WHERE user_id = $1 AND date >= $2::date AND date <= $3::date',
     [req.user.id, cycleStartIso, cycleEndIso]
   );
   const blocksRevealed = Math.min(7, rows[0].n);
-  res.send(views.voortgangPage({ dayInCycle, blocksRevealed }));
+  const isLastDay = dayInCycle === 7;
+  const currentCyclePerfect = isLastDay && blocksRevealed === 7;
+
+  let rewardVideo = null;
+  let streamEmbedSrc = null;
+  if (currentCyclePerfect) {
+    // Tel hoeveel van de eerdere, al volledig afgelopen cycli (vóór de huidige) ook
+    // "perfect" waren (7 van de 7 dagen) — dat bepaalt, samen met de huidige perfecte
+    // cyclus, welke video in de lijst nu aan de beurt is (1e perfecte cyclus -> video 1,
+    // 2e -> video 2, enzovoort).
+    let perfectCyclesCompleted = 1; // de huidige cyclus telt zelf ook mee
+    if (cycleStartIso > anchorIso) {
+      const { rows: pastRows } = await pool.query(
+        `SELECT FLOOR((date - $2::date) / 7)::int AS cycle_idx, COUNT(*)::int AS n
+         FROM completions
+         WHERE user_id = $1 AND date >= $2::date AND date < $3::date
+         GROUP BY cycle_idx`,
+        [req.user.id, anchorIso, cycleStartIso]
+      );
+      perfectCyclesCompleted += pastRows.filter((r) => r.n === 7).length;
+    }
+
+    const { rows: readyVideos } = await pool.query(
+      "SELECT * FROM reward_videos WHERE video_status = 'ready' ORDER BY id ASC"
+    );
+    if (readyVideos.length > 0) {
+      // Is de lijst "op" (meer perfecte cycli dan geüploade video's), dan blijft gewoon de
+      // laatst toegevoegde video staan totdat Herman er een nieuwe aan toevoegt.
+      const idx = Math.min(perfectCyclesCompleted, readyVideos.length) - 1;
+      rewardVideo = readyVideos[idx];
+      if (cfConfigured && rewardVideo.video_uid && process.env.CLOUDFLARE_STREAM_CUSTOMER_CODE) {
+        try {
+          const token = await createSignedPlaybackToken(rewardVideo.video_uid);
+          streamEmbedSrc = `https://customer-${process.env.CLOUDFLARE_STREAM_CUSTOMER_CODE}.cloudflarestream.com/${token}/iframe`;
+        } catch (err) {
+          console.error('Kon geen afspeel-token maken voor de beloningsvideo:', err.message);
+        }
+      }
+    }
+  }
+
+  res.send(views.voortgangPage({ dayInCycle, blocksRevealed, rewardVideo, streamEmbedSrc }));
 });
 
 // --- beheerder: planning ---
@@ -239,6 +282,60 @@ app.post('/admin/planning/:date/attach', requireRole('admin'), async (req, res) 
        VALUES ($1, $2, $3, $4, $5, $6, now())
        ON CONFLICT (date) DO UPDATE SET joint = $2, video_uid = $3, video_label = $4, duration_sec = $5, video_status = $6, updated_at = now()`,
       [date, joint, uid, label || null, status.durationSec, status.ready ? 'ready' : 'processing']
+    );
+    res.json({ ok: true, ready: status.ready });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// --- beheerder: informatie-video's ("beloningsvideo's") — worden één voor één, op
+// volgorde, ontgrendeld zodra een deelnemer een hele trainingsweek (7 van de 7 dagen)
+// afmaakt, zie /voortgang hierboven. Los van de dagelijkse planning: geen datum, gewoon
+// een oplopende lijst waar steeds een nieuwe video aan toegevoegd kan worden. ---
+app.get('/admin/videos', requireRole('admin'), async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM reward_videos ORDER BY id ASC');
+
+  // Zelfde vangnet als bij de dagelijkse planning: een net geüploade video kan bij
+  // Cloudflare nog even op "processing" staan — dit wordt hier automatisch ververst.
+  if (cfConfigured) {
+    for (const v of rows) {
+      if (v.video_status === 'processing' && v.video_uid) {
+        try {
+          const status = await getVideoStatus(v.video_uid);
+          if (status.ready) {
+            await pool.query('UPDATE reward_videos SET video_status = $2, duration_sec = $3 WHERE id = $1', [
+              v.id, 'ready', status.durationSec,
+            ]);
+            v.video_status = 'ready';
+            v.duration_sec = status.durationSec;
+          }
+        } catch (err) {
+          console.error(`Kon status van informatie-video ${v.video_uid} niet verversen:`, err.message);
+        }
+      }
+    }
+  }
+
+  res.send(views.videosPage({ videos: rows, cfConfigured }));
+});
+
+app.post('/admin/videos/upload-url', requireRole('admin'), async (req, res) => {
+  try {
+    const { uploadUrl, uid } = await createDirectUploadUrl();
+    res.json({ uploadUrl, uid });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+app.post('/admin/videos/attach', requireRole('admin'), async (req, res) => {
+  const { uid, label } = req.body;
+  try {
+    const status = await getVideoStatus(uid);
+    await pool.query(
+      `INSERT INTO reward_videos (label, video_uid, duration_sec, video_status) VALUES ($1, $2, $3, $4)`,
+      [label || null, uid, status.durationSec, status.ready ? 'ready' : 'processing']
     );
     res.json({ ok: true, ready: status.ready });
   } catch (err) {

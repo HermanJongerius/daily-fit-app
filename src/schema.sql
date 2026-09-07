@@ -43,3 +43,15 @@ CREATE TABLE IF NOT EXISTS sessions (
 
 CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
 CREATE INDEX IF NOT EXISTS idx_completions_user ON completions(user_id);
+
+-- Informatie-video's die een deelnemer ontgrendelt door een hele trainingsweek (7 van de 7
+-- dagen) af te maken — zie /voortgang in app.js. Op volgorde: de eerste volledig afgeronde
+-- cyclus ontgrendelt de video met het laagste id, de tweede cyclus de volgende, enzovoort.
+CREATE TABLE IF NOT EXISTS reward_videos (
+  id             SERIAL PRIMARY KEY,
+  label          TEXT,                -- mens-leesbare titel/omschrijving, door de beheerder ingevuld
+  video_uid      TEXT,                -- Cloudflare Stream video-ID
+  duration_sec   INTEGER,
+  video_status   TEXT NOT NULL DEFAULT 'processing' CHECK (video_status IN ('processing', 'ready')),
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);

@@ -86,8 +86,8 @@ export function vandaagPage({ user, schedule, done, weekDots }) {
   } else if (done) {
     center = `<div style="width:96px;height:96px;border-radius:50%;background:${COLORS.teal100};display:flex;align-items:center;justify-content:center;">
         <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="${COLORS.teal700}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
-      <div style="font-size:26px;font-weight:900;margin-top:16px;">Je hebt vandaag al bewogen!</div>
-      <div style="font-size:16px;font-weight:600;color:${COLORS.inkSoft};margin-top:8px;">Knap gedaan. Morgen staan de ${esc(tomorrowJoint.toLowerCase())}oefeningen klaar.</div>`;
+      <div style="font-size:26px;font-weight:900;margin-top:16px;">Tot morgen! Je bent nu klaar.</div>
+      <div style="font-size:16px;font-weight:600;color:${COLORS.inkSoft};margin-top:8px;">Morgen staan de ${esc(tomorrowJoint.toLowerCase())}oefeningen klaar.</div>`;
   } else if (schedule.video_status !== 'ready') {
     center = `<div style="font-size:20px;font-weight:800;margin-top:16px;">De oefeningen van vandaag worden nog klaargezet</div>
       <div style="font-size:15px;font-weight:600;color:${COLORS.inkSoft};margin-top:6px;">Probeer het over een paar minuten opnieuw.</div>`;
@@ -263,7 +263,7 @@ export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
     </div>
     <div style="max-width:520px;margin:0 auto;width:100%;padding:24px;">
       <div style="font-size:22px;font-weight:900;margin-bottom:14px;">${esc(schedule.joint)}oefeningen</div>
-      <div style="background:${COLORS.teal100};color:${COLORS.teal900};padding:10px 14px;border-radius:12px;font-size:12px;font-weight:600;line-height:1.5;margin-bottom:14px;">Voor uw veiligheid: overleg bij twijfel met uw huisarts, stop bij pijn of duizeligheid, en oefen op eigen tempo in een veilige, opgeruimde ruimte.</div>
+      <div style="background:${COLORS.teal100};color:${COLORS.teal900};padding:12px 16px;border-radius:12px;font-size:15px;font-weight:600;line-height:1.5;margin-bottom:14px;">Voor uw veiligheid: overleg bij twijfel met uw huisarts, stop bij pijn of duizeligheid, en oefen op eigen tempo in een veilige, opgeruimde ruimte.</div>
       ${player}
       ${devNotice}${devButton}
     </div>
@@ -275,9 +275,13 @@ export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
 // cyclus (los van de kalenderweek) als een plaatje met 7 vakjes erover — elke training
 // laat er één verdwijnen. Op de 7e/laatste dag van de cyclus verschijnt in plaats van de
 // korte aanmoediging één van de drie eindteksten, afhankelijk van hoeveel van de 7
-// trainingen zijn gelukt. Na 10 seconden gaat het vanzelf terug naar "Vandaag" (met een
-// knop ernaast voor wie liever zelf doorgaat).
-export function voortgangPage({ dayInCycle, blocksRevealed }) {
+// trainingen zijn gelukt. Bij een perfecte week (7 van de 7) wordt bovendien, als de
+// beheerder er een heeft klaargezet, een informatie-video ontgrendeld (zie
+// rewardVideo/streamEmbedSrc hieronder en /admin/videos in app.js) — het plaatje ís dan
+// even de video zelf, in plaats van de vaste plaatsvervangende illustratie. Gaat pas
+// verder naar "Vandaag" (met de eindtekst "Tot morgen! Je bent nu klaar") als de
+// gebruiker zelf op "Verder" klikt — geen automatische doorschakeling meer.
+export function voortgangPage({ dayInCycle, blocksRevealed, rewardVideo = null, streamEmbedSrc = null }) {
   const totalBlocks = 7;
   const isLastDay = dayInCycle === totalBlocks;
 
@@ -286,7 +290,9 @@ export function voortgangPage({ dayInCycle, blocksRevealed }) {
   if (isLastDay) {
     if (blocksRevealed === 7) {
       messageTitle = 'Compleet!';
-      messageBody = 'Super gedaan! Je hebt deze week al je gewrichten en spieren er omheen aandacht gegeven.';
+      messageBody = rewardVideo
+        ? 'Super gedaan! Je hebt een nieuwe video ontgrendeld, met waardevolle informatie over bewegen.'
+        : 'Super gedaan! Je hebt deze week al je gewrichten en spieren er omheen aandacht gegeven.';
     } else if (blocksRevealed >= 4) {
       messageTitle = 'Trots op je';
       messageBody = 'Ik ben trots op je. Je was deze week lekker op weg. Volgende week een nieuwe kans om 7 trainingen achter elkaar te doen.';
@@ -309,7 +315,9 @@ export function voortgangPage({ dayInCycle, blocksRevealed }) {
   // Tijdelijke plaatsvervanger totdat er een eigen foto/afbeelding is aangeleverd — zelf
   // getekend in de bestaande huisstijlkleuren (teal/koraal/crème), zodat het geheel er nu
   // al compleet uitziet en straks zonder codewijziging vervangen kan worden door een
-  // echte foto (gewoon de src van de afbeelding aanpassen).
+  // echte foto (gewoon de src van de afbeelding aanpassen). Blijft ongewijzigd zichtbaar
+  // op dag 1 t/m 6 (en op dag 7 zonder perfecte week) — de verrassing van de video blijft
+  // zo intact tot het moment dat hij daadwerkelijk ontgrendeld wordt.
   const placeholderImage = `<svg viewBox="0 0 400 300" width="100%" height="100%" preserveAspectRatio="xMidYMid slice" xmlns="http://www.w3.org/2000/svg" style="display:block;">
     <rect width="400" height="300" fill="${COLORS.teal100}"/>
     <circle cx="200" cy="110" r="55" fill="${COLORS.coral600}"/>
@@ -317,21 +325,34 @@ export function voortgangPage({ dayInCycle, blocksRevealed }) {
     <path d="M0,260 Q120,215 240,250 T400,240 V300 H0 Z" fill="${COLORS.teal900}"/>
   </svg>`;
 
+  const rewardVideoPlayer = streamEmbedSrc
+    ? `<iframe src="${esc(streamEmbedSrc)}" style="width:100%;height:100%;border:none;display:block;" allow="accelerometer; gyroscope; autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen></iframe>`
+    : `<div style="width:100%;height:100%;background:${COLORS.teal900};color:${COLORS.cream};display:flex;align-items:center;justify-content:center;text-align:center;padding:20px;font-weight:700;font-size:14px;">Cloudflare Stream is nog niet ingesteld, dus deze video kan hier niet worden getoond.</div>`;
+
+  const pictureArea = rewardVideo
+    ? `<div style="position:absolute;top:0;right:0;bottom:0;left:0;">${rewardVideoPlayer}</div>`
+    : `<div style="position:absolute;top:0;right:0;bottom:0;left:0;">${placeholderImage}</div>
+       <div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;">${blocksHtml}</div>`;
+
+  const rewardLabel = rewardVideo
+    ? `<div style="font-size:14px;font-weight:800;color:${COLORS.teal900};margin-top:12px;">${esc(rewardVideo.label || 'Jouw beloningsvideo')}</div>`
+    : '';
+
   const body = `
   <div style="min-height:100vh;display:flex;flex-direction:column;background:${COLORS.cream};padding-bottom:64px;">
     <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;max-width:420px;margin:0 auto;width:100%;">
-      <div style="font-size:15px;font-weight:700;color:${COLORS.inkSoft};text-transform:uppercase;letter-spacing:0.06em;">Jouw cyclus</div>
-      <div style="width:100%;aspect-ratio:4/3;border-radius:20px;overflow:hidden;position:relative;margin-top:14px;box-shadow:0 2px 10px rgba(0,0,0,0.08);">
-        <div style="position:absolute;top:0;right:0;bottom:0;left:0;">${placeholderImage}</div>
-        <div style="position:absolute;top:0;right:0;bottom:0;left:0;display:flex;">${blocksHtml}</div>
+      <div style="font-size:15px;font-weight:700;color:${COLORS.inkSoft};text-transform:uppercase;letter-spacing:0.06em;">${rewardVideo ? 'Jouw beloningsvideo' : 'Jouw cyclus'}</div>
+      <div style="width:100%;aspect-ratio:${rewardVideo ? '16/9' : '4/3'};border-radius:20px;overflow:hidden;position:relative;margin-top:14px;box-shadow:0 2px 10px rgba(0,0,0,0.08);">
+        ${pictureArea}
       </div>
+      ${rewardLabel}
       <div style="font-size:22px;font-weight:900;margin-top:24px;color:${COLORS.teal900};">${esc(messageTitle)}</div>
       <div style="font-size:17px;font-weight:600;color:${COLORS.inkSoft};margin-top:10px;line-height:1.5;">${esc(messageBody)}</div>
       <a href="/vandaag" style="margin-top:26px;display:inline-flex;align-items:center;justify-content:center;height:52px;padding:0 30px;border-radius:16px;background:${COLORS.teal700};color:${COLORS.white};font-size:15px;font-weight:800;text-decoration:none;">Verder</a>
     </div>
   </div>${demoFooter()}`;
 
-  return layout({ title: 'Jouw voortgang', body, extraHead: '<meta http-equiv="refresh" content="10;url=/vandaag">' });
+  return layout({ title: 'Jouw voortgang', body });
 }
 
 export function errorPage() {
@@ -365,6 +386,7 @@ export function expiredPage({ user }) {
 function adminShell(active, body) {
   const tabs = [
     ['planning', 'Planning', '/admin/planning'],
+    ['videos', "Video's", '/admin/videos'],
     ['gebruikers', 'Gebruikers', '/admin/gebruikers'],
   ];
   const nav = tabs.map(([key, label, href]) =>
@@ -447,6 +469,72 @@ export function planningPage({ days, cfConfigured }) {
       });
     </script>`;
   return layout({ title: 'Planning', body: adminShell('planning', body) });
+}
+
+// Beheerscherm voor de informatie-video's die deelnemers ontgrendelen door een hele
+// trainingsweek (7 van de 7 dagen) af te maken, zie /voortgang. Los van de dagelijkse
+// planning: geen datums, gewoon een oplopende lijst ("Video 1", "Video 2", ...) waar
+// steeds een nieuwe aan toegevoegd kan worden. De eerste perfecte week van een deelnemer
+// ontgrendelt Video 1, de tweede Video 2, enzovoort — voor iedereen in dezelfde volgorde.
+export function videosPage({ videos, cfConfigured }) {
+  const rows = videos.map((v, i) => `
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border:1px solid ${COLORS.border};border-radius:14px;background:${COLORS.white};margin-bottom:10px;">
+      <div>
+        <div style="font-size:13px;font-weight:700;color:${COLORS.inkSoft};">Video ${i + 1}</div>
+        <div style="font-size:16px;font-weight:800;">${v.label ? esc(v.label) : 'Zonder titel'} ${videoStatusBadge(v.video_status)}</div>
+      </div>
+    </div>`).join('');
+
+  const notConfiguredNotice = cfConfigured ? '' : `<div style="background:#FBEDD3;color:${COLORS.amber600};padding:10px 14px;border-radius:12px;font-size:13px;font-weight:700;margin-bottom:16px;">Cloudflare Stream is nog niet ingesteld op de server (CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN). Video-upload staat daarom uit.</div>`;
+
+  const body = `
+    <div style="margin-bottom:20px;">
+      <div style="font-size:24px;font-weight:900;">Informatie-video's</div>
+      <div style="font-size:14px;font-weight:600;color:${COLORS.inkSoft};margin-top:4px;line-height:1.5;">Deze video's worden één voor één ontgrendeld: zodra een deelnemer een hele trainingsweek volmaakt (7 van de 7 dagen), verschijnt de eerstvolgende video uit deze lijst op het voortgangsscherm. Is de lijst op, dan blijft de laatst toegevoegde video zichtbaar totdat je hieronder een nieuwe toevoegt.</div>
+    </div>
+    ${notConfiguredNotice}
+    ${videos.length ? rows : `<div style="font-size:14px;color:${COLORS.inkSoft};margin-bottom:16px;">Nog geen video's toegevoegd.</div>`}
+    <div style="border:1px dashed ${COLORS.border};border-radius:14px;padding:16px;margin-top:6px;max-width:400px;">
+      <div style="font-size:14px;font-weight:800;margin-bottom:10px;">Nieuwe video toevoegen (wordt Video ${videos.length + 1})</div>
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <input type="text" id="new-video-label" placeholder="Titel/omschrijving (optioneel)" style="height:44px;border-radius:12px;border:2px solid ${COLORS.border};padding:0 12px;font-size:14px;font-family:inherit;" />
+        <input type="file" accept="video/*" id="new-video-file" ${cfConfigured ? '' : 'disabled'} style="font-size:13px;" />
+        <span id="new-video-status" style="font-size:12px;color:${COLORS.inkSoft};"></span>
+      </div>
+    </div>
+    <script>
+      var fileInput = document.getElementById('new-video-file');
+      if (fileInput) {
+        fileInput.addEventListener('change', async function () {
+          var statusEl = document.getElementById('new-video-status');
+          var labelInput = document.getElementById('new-video-label');
+          var file = fileInput.files[0];
+          if (!file) return;
+          statusEl.textContent = 'Upload-link aanvragen...';
+          try {
+            var res = await fetch('/admin/videos/upload-url', { method: 'POST' });
+            var data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Onbekende fout');
+            statusEl.textContent = 'Video uploaden...';
+            var form = new FormData();
+            form.append('file', file);
+            var uploadRes = await fetch(data.uploadUrl, { method: 'POST', body: form });
+            if (!uploadRes.ok) throw new Error('Upload naar Cloudflare mislukt');
+            statusEl.textContent = 'Wordt verwerkt door Cloudflare...';
+            await fetch('/admin/videos/attach', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ uid: data.uid, label: (labelInput && labelInput.value) || file.name }),
+            });
+            statusEl.textContent = 'Klaar — pagina wordt ververst...';
+            setTimeout(function () { window.location.reload(); }, 1200);
+          } catch (err) {
+            statusEl.textContent = 'Fout: ' + err.message;
+          }
+        });
+      }
+    </script>`;
+  return layout({ title: "Informatie-video's", body: adminShell('videos', body) });
 }
 
 function paidStatusBadge(u) {

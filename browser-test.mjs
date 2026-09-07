@@ -1,8 +1,9 @@
 import { writeFileSync } from 'node:fs';
 import pkg from '/home/claude/.npm-global/lib/node_modules/playwright/index.js';
 const { chromium } = pkg;
-import { JOINTS_BY_WEEKDAY, weekdayInAppTz } from './src/helpers.js';
+import { JOINTS_BY_WEEKDAY, weekdayInAppTz, todayIso, isoDateLocal } from './src/helpers.js';
 import * as views from './src/views.js';
+import { pool } from './src/db.js';
 
 const expectedJointToday = JOINTS_BY_WEEKDAY[weekdayInAppTz()];
 
@@ -48,9 +49,13 @@ await page.waitForLoadState('networkidle');
 assert(page.url().endsWith('/voortgang'), 'na het markeren als uitgekeken verschijnt eerst het voortgangsscherm (cyclus-onthulling)');
 text = await page.textContent('body');
 assert(text.includes('vakje') || text.includes('Compleet') || text.includes('Trots op je') || text.includes('Lekker bezig'), 'voortgangsscherm toont de cyclus-onthulling of een van de eindteksten');
-await page.goto(BASE + '/vandaag');
+const hasAutoRefresh = await page.locator('meta[http-equiv="refresh" i]').count();
+assert(hasAutoRefresh === 0, 'het voortgangsscherm schakelt niet meer automatisch door — alleen via de "Verder"-knop');
+await page.click('a:has-text("Verder")');
+await page.waitForLoadState('networkidle');
+assert(page.url().endsWith('/vandaag'), 'de "Verder"-knop op het voortgangsscherm gaat naar /vandaag');
 text = await page.textContent('body');
-assert(text.includes('al bewogen'), 'na het voortgangsscherm toont /vandaag de "al bewogen"-status');
+assert(text.includes('Tot morgen'), 'na het voortgangsscherm toont /vandaag de "al bewogen"-status');
 
 // --- serverkant afgedwongen daglimiet: rechtstreeks naar /video mag niet nog een keer tellen ---
 await page.goto(BASE + '/video');
@@ -82,6 +87,13 @@ text = await page.textContent('body');
 assert(page.url().endsWith('/admin/planning'), 'beheerder komt op /admin/planning terecht');
 assert(text.includes('Planning'), 'planningscherm wordt getoond');
 assert(text.includes('Cloudflare Stream is nog niet ingesteld'), 'melding dat Cloudflare nog niet is ingesteld, dus upload staat uit');
+
+// --- beheerder: nieuw scherm voor de informatie-video's (los van de dagelijkse planning) ---
+await page.click('a[href="/admin/videos"]');
+await page.waitForLoadState('networkidle');
+text = await page.textContent('body');
+assert(text.includes("Informatie-video's"), "het nieuwe beheerscherm voor informatie-video's wordt getoond");
+assert(text.includes('Nog geen video'), 'zolang er nog geen video is toegevoegd, toont het scherm dat duidelijk');
 
 // --- gebruikers-scherm: nieuw account aanmaken ---
 await page.click('a[href="/admin/gebruikers"]');
@@ -192,5 +204,65 @@ assert(text.includes('Te veel mislukte pogingen'), 'na 5 mislukte pogingen wordt
   await videoPage2.close();
 }
 
+// --- beloningsvideo's: een volledig afgeronde trainingsweek (7 van de 7 dagen) ontgrendelt
+// de eerstvolgende video uit de lijst die de beheerder heeft geüpload (op volgorde). Dit
+// vraagt om een gecontroleerde, "perfecte" week — die kan niet via de normale flow (dat
+// duurt 7 echte dagen), dus wordt hier rechtstreeks in de database klaargezet.
+{
+  const { rows: corrieRows } = await pool.query("SELECT id, created_at FROM users WHERE username = 'corrie'");
+  const corrieId = corrieRows[0].id;
+  const originalCreatedAt = corrieRows[0].created_at;
+
+  const todayIsoStr = todayIso();
+  const todayDate = new Date(todayIsoStr + 'T00:00:00');
+  const cycleStartDate = new Date(todayDate.getTime() - 6 * 86400000);
+  const anchorIsoStr = isoDateLocal(cycleStartDate);
+
+  // Aanmelddatum zo zetten dat "vandaag" precies dag 7 van corrie's cyclus is, en alle 7
+  // dagen van die cyclus vullen met een voltooide training — een perfecte week.
+  await pool.query('UPDATE users SET created_at = $2 WHERE id = $1', [corrieId, anchorIsoStr]);
+  await pool.query('DELETE FROM completions WHERE user_id = $1', [corrieId]);
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(cycleStartDate.getTime() + i * 86400000);
+    await pool.query(
+      'INSERT INTO completions (user_id, date) VALUES ($1, $2) ON CONFLICT (user_id, date) DO NOTHING',
+      [corrieId, isoDateLocal(d)]
+    );
+  }
+
+  // Zonder een geüploade beloningsvideo verandert er niets aan het bestaande gedrag —
+  // gewoon de tekst "Compleet!", geen video. Dit voorkomt dat deze nieuwe functionaliteit
+  // iets breekt zolang Herman nog geen enkele video heeft geüpload. (Er is op dit punt in
+  // de testreeks geen actieve sessie meer — de vorige stap testte juist een mislukte login
+  // — dus hier gewoon opnieuw inloggen als corrie.)
+  await page.goto(BASE + '/login');
+  await page.fill('input[name="username"]', 'corrie');
+  await page.fill('input[name="credential"]', '06 12 34 56 78');
+  await page.click('button[type="submit"]');
+  await page.waitForLoadState('networkidle');
+  await page.goto(BASE + '/voortgang');
+  text = await page.textContent('body');
+  assert(text.includes('Compleet'), 'een perfecte week (7/7) zonder geüploade beloningsvideo toont nog gewoon "Compleet!"');
+  assert(!text.includes('beloningsvideo') && !text.includes('ontgrendeld'), 'zonder geüploade beloningsvideo verschijnt er geen verwijzing naar een ontgrendelde video');
+
+  // Nu een (nep) beloningsvideo klaarzetten zoals de beheerder dat via /admin/videos zou
+  // doen, en controleren dat die na een perfecte week ook echt tevoorschijn komt.
+  const { rows: videoRows } = await pool.query(
+    `INSERT INTO reward_videos (label, video_uid, video_status) VALUES ($1, $2, 'ready') RETURNING id`,
+    ['Testvideo over bewegen', 'fake-uid-voor-test']
+  );
+  await page.goto(BASE + '/voortgang');
+  text = await page.textContent('body');
+  assert(text.includes('Testvideo over bewegen'), 'na een perfecte week (7/7) met een klaarstaande video verschijnt de titel van de ontgrendelde beloningsvideo');
+  assert(text.includes('Cloudflare Stream is nog niet ingesteld'), 'zonder Cloudflare-configuratie toont de ontgrendelde video hier een duidelijke melding in plaats van vast te lopen');
+
+  // Opruimen: de testvideo weer verwijderen en corrie's aanmelddatum/trainingen terugzetten
+  // zoals ze waren, zodat een volgende testrun weer van een schone lei begint.
+  await pool.query('DELETE FROM reward_videos WHERE id = $1', [videoRows[0].id]);
+  await pool.query('UPDATE users SET created_at = $2 WHERE id = $1', [corrieId, originalCreatedAt.toISOString()]);
+  await pool.query('DELETE FROM completions WHERE user_id = $1', [corrieId]);
+}
+
 await browser.close();
+await pool.end();
 console.log('\nAlle controles op de echte applicatie zijn geslaagd.');

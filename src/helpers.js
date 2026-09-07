@@ -67,8 +67,10 @@ export function fmtDateLong(iso) {
 // De cyclus start op de dag dat het account is aangemaakt (created_at) en loopt daarna
 // steeds door in blokken van 7 kalenderdagen — onafhankelijk van maandag/zondag, en
 // onafhankelijk per deelnemer (iedereen heeft zijn eigen start- en cyclusdagen).
-// Geeft terug: dayInCycle (1 t/m 7, dag 7 = laatste dag van de cyclus) en de
-// begin-/einddatum (iso-strings) van de cyclus waar "todayIsoStr" in valt.
+// Geeft terug: dayInCycle (1 t/m 7, dag 7 = laatste dag van de cyclus), de
+// begin-/einddatum (iso-strings) van de cyclus waar "todayIsoStr" in valt, en de
+// aanmelddatum zelf (anchorIso) — dat laatste heeft app.js nodig om ook eerdere,
+// al afgelopen cycli te kunnen narekenen (zie de beloningsvideo's, /voortgang).
 export function cycleInfoForUser(createdAt, todayIsoStr) {
   const anchorIso = isoDateLocal(createdAt);
   const anchor = new Date(anchorIso + 'T00:00:00');
@@ -77,7 +79,7 @@ export function cycleInfoForUser(createdAt, todayIsoStr) {
   const dayInCycle = (daysSinceAnchor % 7) + 1; // 1..7
   const cycleStart = new Date(anchor.getTime() + (daysSinceAnchor - (dayInCycle - 1)) * 86400000);
   const cycleEnd = new Date(cycleStart.getTime() + 6 * 86400000);
-  return { dayInCycle, cycleStartIso: isoDateLocal(cycleStart), cycleEndIso: isoDateLocal(cycleEnd) };
+  return { dayInCycle, cycleStartIso: isoDateLocal(cycleStart), cycleEndIso: isoDateLocal(cycleEnd), anchorIso };
 }
 
 // Aantal dagen dat een deelnemer had kúnnen trainen: vanaf de dag van aanmelden
