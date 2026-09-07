@@ -95,6 +95,33 @@ text = await page.textContent('body');
 assert(text.includes('Test Persoon'), 'nieuw aangemaakte senior verschijnt in de lijst');
 assert(text.includes('0611122233'), 'telefoonnummer van de nieuwe gebruiker wordt getoond');
 
+// --- exporteren naar Excel: naam, telefoonnummer en trainingsvoortgang van alle deelnemers ---
+{
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.click('a[href="/admin/gebruikers/export"]'),
+  ]);
+  const exportPath = '/tmp/_browsertest_export.xlsx';
+  await download.saveAs(exportPath);
+  assert(/^dailyfit-deelnemers-\d{4}-\d{2}-\d{2}\.xlsx$/.test(download.suggestedFilename()), 'de Excel-export krijgt een herkenbare bestandsnaam met datum');
+
+  const ExcelJS = (await import('exceljs')).default;
+  const workbook = new ExcelJS.Workbook();
+  await workbook.xlsx.readFile(exportPath);
+  const sheet = workbook.getWorksheet('Deelnemers');
+  const headerRow = sheet.getRow(1).values.slice(1);
+  assert(
+    headerRow.join('|') === ['Naam', 'Mobiel nummer', 'Betaald tot', 'Status', 'Aangemeld op', 'Aantal keer getraind', 'Mogelijke traindagen', 'Percentage getraind'].join('|'),
+    'de Excel-export heeft de verwachte kolomkoppen'
+  );
+  const rows = [];
+  sheet.eachRow((row, rowNumber) => { if (rowNumber > 1) rows.push(row.values.slice(1)); });
+  const testRow = rows.find((r) => r[0] === 'Test Persoon');
+  assert(!!testRow, 'de nieuw aangemaakte senior staat ook in de Excel-export');
+  assert(testRow[1] === '0611122233', 'het telefoonnummer in de export klopt');
+  assert(!rows.some((r) => r[0] === 'Beheerder'), 'het beheerder-account zelf staat niet tussen de deelnemers in de export');
+}
+
 // --- dubbele gebruikersnaam wordt geweigerd ---
 await page.fill('form[action="/admin/gebruikers"] input[name="displayName"]', 'Dup');
 await page.fill('form[action="/admin/gebruikers"] input[name="username"]', 'testp');

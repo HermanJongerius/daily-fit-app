@@ -1,5 +1,6 @@
 import express from 'express';
 import cookieParser from 'cookie-parser';
+import ExcelJS from 'exceljs';
 import { pool } from './db.js';
 import {
   normalizePhone, hashPassword, verifyPassword, isLocked, registerFailedAttempt,
@@ -269,6 +270,57 @@ async function loadUsersWithStats() {
 app.get('/admin/gebruikers', requireRole('admin'), async (req, res) => {
   const users = await loadUsersWithStats();
   res.send(views.usersPage({ users, error: null }));
+});
+
+// --- export naar Excel: naam, telefoonnummer en trainingsvoortgang van alle deelnemers,
+// zodat de beheerder dit ook buiten de app (bijv. om uit te printen of te delen) kan
+// bijhouden. Alleen senioren komen in de lijst — het beheerder-account zelf traint niet.
+app.get('/admin/gebruikers/export', requireRole('admin'), async (req, res) => {
+  const users = await loadUsersWithStats();
+  const seniors = users.filter((u) => u.role === 'senior');
+
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = 'DailyFit';
+  workbook.created = new Date();
+  const sheet = workbook.addWorksheet('Deelnemers');
+
+  sheet.columns = [
+    { header: 'Naam', key: 'naam', width: 26 },
+    { header: 'Mobiel nummer', key: 'telefoon', width: 18 },
+    { header: 'Betaald tot', key: 'betaaldTot', width: 14, style: { numFmt: 'dd-mm-yyyy' } },
+    { header: 'Status', key: 'status', width: 16 },
+    { header: 'Aangemeld op', key: 'aangemeld', width: 14, style: { numFmt: 'dd-mm-yyyy' } },
+    { header: 'Aantal keer getraind', key: 'aantalGetraind', width: 20 },
+    { header: 'Mogelijke traindagen', key: 'mogelijkeDagen', width: 20 },
+    { header: 'Percentage getraind', key: 'percentage', width: 20, style: { numFmt: '0"%"' } },
+  ];
+  sheet.getRow(1).font = { bold: true };
+  sheet.getRow(1).alignment = { vertical: 'middle' };
+
+  const today = todayIso();
+  for (const u of seniors) {
+    const status = !u.paid_until
+      ? 'Geen betaaldatum'
+      : isoDateLocal(u.paid_until) < today
+        ? 'Verlopen'
+        : 'Actief';
+    sheet.addRow({
+      naam: u.display_name,
+      telefoon: u.phone_display || '',
+      betaaldTot: u.paid_until ? new Date(u.paid_until) : null,
+      status,
+      aangemeld: new Date(u.created_at),
+      aantalGetraind: u.trainingStats ? u.trainingStats.completed : 0,
+      mogelijkeDagen: u.trainingStats ? u.trainingStats.possible : 0,
+      percentage: u.trainingStats ? u.trainingStats.percent : 0,
+    });
+  }
+
+  const bestandsnaam = `dailyfit-deelnemers-${today}.xlsx`;
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+  res.setHeader('Content-Disposition', `attachment; filename="${bestandsnaam}"`);
+  await workbook.xlsx.write(res);
+  res.end();
 });
 
 app.post('/admin/gebruikers', requireRole('admin'), async (req, res) => {

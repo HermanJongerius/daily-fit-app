@@ -263,6 +263,7 @@ export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
     </div>
     <div style="max-width:520px;margin:0 auto;width:100%;padding:24px;">
       <div style="font-size:22px;font-weight:900;margin-bottom:14px;">${esc(schedule.joint)}oefeningen</div>
+      <div style="background:${COLORS.teal100};color:${COLORS.teal900};padding:10px 14px;border-radius:12px;font-size:12px;font-weight:600;line-height:1.5;margin-bottom:14px;">Voor uw veiligheid: overleg bij twijfel met uw huisarts, stop bij pijn of duizeligheid, en oefen op eigen tempo in een veilige, opgeruimde ruimte.</div>
       ${player}
       ${devNotice}${devButton}
     </div>
@@ -274,7 +275,7 @@ export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
 // cyclus (los van de kalenderweek) als een plaatje met 7 vakjes erover — elke training
 // laat er één verdwijnen. Op de 7e/laatste dag van de cyclus verschijnt in plaats van de
 // korte aanmoediging één van de drie eindteksten, afhankelijk van hoeveel van de 7
-// trainingen zijn gelukt. Na 5 seconden gaat het vanzelf terug naar "Vandaag" (met een
+// trainingen zijn gelukt. Na 10 seconden gaat het vanzelf terug naar "Vandaag" (met een
 // knop ernaast voor wie liever zelf doorgaat).
 export function voortgangPage({ dayInCycle, blocksRevealed }) {
   const totalBlocks = 7;
@@ -330,7 +331,7 @@ export function voortgangPage({ dayInCycle, blocksRevealed }) {
     </div>
   </div>${demoFooter()}`;
 
-  return layout({ title: 'Jouw voortgang', body, extraHead: '<meta http-equiv="refresh" content="5;url=/vandaag">' });
+  return layout({ title: 'Jouw voortgang', body, extraHead: '<meta http-equiv="refresh" content="10;url=/vandaag">' });
 }
 
 export function errorPage() {
@@ -489,9 +490,15 @@ export function usersPage({ users, error }) {
     </div>`).join('');
 
   const body = `
-    <div style="margin-bottom:20px;">
-      <div style="font-size:24px;font-weight:900;">Gebruikers</div>
-      <div style="font-size:14px;font-weight:600;color:${COLORS.inkSoft};margin-top:4px;">Accounts worden handmatig aangemaakt en persoonlijk doorgegeven &mdash; geen zelfregistratie.</div>
+    <div style="margin-bottom:20px;display:flex;align-items:start;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+      <div>
+        <div style="font-size:24px;font-weight:900;">Gebruikers</div>
+        <div style="font-size:14px;font-weight:600;color:${COLORS.inkSoft};margin-top:4px;">Accounts worden handmatig aangemaakt en persoonlijk doorgegeven &mdash; geen zelfregistratie.</div>
+      </div>
+      <a href="/admin/gebruikers/export" style="display:inline-flex;align-items:center;gap:8px;height:42px;padding:0 18px;border-radius:12px;background:${COLORS.teal900};color:${COLORS.cream};text-decoration:none;font-size:13px;font-weight:800;white-space:nowrap;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3v12"></path><path d="M7 10l5 5 5-5"></path><path d="M4 21h16"></path></svg>
+        Exporteren naar Excel
+      </a>
     </div>
     <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:24px;align-items:start;">
       <div>${rows}</div>
