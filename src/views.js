@@ -86,7 +86,7 @@ export function vandaagPage({ user, schedule, done, weekDots }) {
   } else if (done) {
     center = `<div style="width:96px;height:96px;border-radius:50%;background:${COLORS.teal100};display:flex;align-items:center;justify-content:center;">
         <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="${COLORS.teal700}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
-      <div style="font-size:26px;font-weight:900;margin-top:16px;">Tot morgen! Je bent nu klaar.</div>
+      <div style="font-size:26px;font-weight:900;margin-top:16px;">Tot morgen! Je bent al klaar.</div>
       <div style="font-size:16px;font-weight:600;color:${COLORS.inkSoft};margin-top:8px;">Morgen staan de ${esc(tomorrowJoint.toLowerCase())}oefeningen klaar.</div>`;
   } else if (schedule.video_status !== 'ready') {
     center = `<div style="font-size:20px;font-weight:800;margin-top:16px;">De oefeningen van vandaag worden nog klaargezet</div>
@@ -279,7 +279,7 @@ export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
 // beheerder er een heeft klaargezet, een informatie-video ontgrendeld (zie
 // rewardVideo/streamEmbedSrc hieronder en /admin/videos in app.js) — het plaatje ís dan
 // even de video zelf, in plaats van de vaste plaatsvervangende illustratie. Gaat pas
-// verder naar "Vandaag" (met de eindtekst "Tot morgen! Je bent nu klaar") als de
+// verder naar "Vandaag" (met de eindtekst "Tot morgen! Je bent al klaar") als de
 // gebruiker zelf op "Verder" klikt — geen automatische doorschakeling meer.
 export function voortgangPage({ dayInCycle, blocksRevealed, rewardVideo = null, streamEmbedSrc = null }) {
   const totalBlocks = 7;
@@ -301,8 +301,12 @@ export function voortgangPage({ dayInCycle, blocksRevealed, rewardVideo = null, 
       messageBody = 'Je bent lekker bezig! Probeer een vast moment van de dag in te plannen om je gewrichten en spieren wat aandacht te geven.';
     }
   } else {
+    // Titel en tekst gaan hier allebei over hetzelfde: het aantal daadwerkelijk afgeronde
+    // trainingen (blocksRevealed), niet over de kalenderdag (dayInCycle). Die twee liepen
+    // uit elkaar zodra een dag werd overgeslagen (bijv. "Dag 5 van 7" met nog maar 3
+    // afgeronde trainingen), wat verwarrend was — zie technisch-ontwerp.md sectie 4a.
     const remaining = totalBlocks - blocksRevealed;
-    messageTitle = `Dag ${dayInCycle} van 7`;
+    messageTitle = `${blocksRevealed} van de 7 gedaan`;
     messageBody = remaining === 1 ? 'Nog 1 vakje te gaan voor je beloning!' : `Nog ${remaining} vakjes te gaan voor je beloning!`;
   }
 
