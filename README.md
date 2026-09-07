@@ -1,12 +1,13 @@
 # DailyFit — echte applicatie
 
-**Huidige versie: 1.10.3** (zie ook `version` in `package.json` — deze twee horen altijd gelijk te zijn).
+**Huidige versie: 1.10.4** (zie ook `version` in `package.json` — deze twee horen altijd gelijk te zijn).
 
 Dit is de echte, werkende opvolger van de klikbare demo: een Node.js-webapplicatie met een PostgreSQL-database, gebouwd volgens `technisch-ontwerp.md` in het DailyFit-project. Alles hieronder is getest en werkt lokaal; wat nog moet gebeuren staat onderaan.
 
 ## Wijzigingen (changelog)
 Bij elke wijziging aan de code wordt hier een nieuwe regel toegevoegd én het versienummer hierboven (en in `package.json`) opgehoogd. Zo is in één oogopslag te zien welke versie waar draait (test vs. live) en wat er precies is veranderd — dat voorkomt dat een fout ergens onopgemerkt blijft hangen.
 
+- **1.10.4** (7 sep 2026) — Op verzoek: de veiligheidsdisclaimer op de video-pagina is aangepast van "overleg bij twijfel met uw huisarts" naar "overleg bij twijfel over deelname met uw huisarts" — duidelijker waarover er precies overlegd moet worden. De rest van de tekst is ongewijzigd.
 - **1.10.3** (7 sep 2026) — Bugfix, gemeld door Herman: op het voortgangsscherm (tijdens de cyclus, vóór dag 7) toonde de titel de kalenderdag ("Dag 5 van 7"), terwijl de tekst eronder ("Nog 4 vakjes te gaan") het aantal daadwerkelijk afgeronde trainingen toonde. Zodra een dag was overgeslagen, liepen die twee getallen uit elkaar en gaf dat een verwarrende, tegenstrijdig ogende tekst. Titel en tekst gaan nu allebei over hetzelfde: het aantal afgeronde trainingen (bijv. "3 van de 7 gedaan" met "Nog 4 vakjes te gaan"). De kalenderdag wordt niet meer los getoond.
 - **1.10.2** (7 sep 2026) — Op verzoek: op het scherm "Vandaag" is de eindtekst "Tot morgen! Je bent nu klaar." aangepast naar "Tot morgen! Je bent al klaar." Deze tekst verschijnt zowel direct na het klikken op "Verder" als wanneer iemand later diezelfde dag opnieuw inlogt; "al klaar" past in beide gevallen net iets beter dan "nu klaar".
 - **1.10.1** (7 sep 2026) — Op verzoek: het tekstje boven het plaatje op het voortgangsscherm ("Jouw cyclus") is vervangen door een korte uitleg van het principe: "Door elke dag te bewegen openbaart zich na 7 dagen een video met een interessant 'weetje'." Alleen zichtbaar zolang de video nog niet ontgrendeld is — zodra dat wel zo is, staat er nog gewoon "Jouw beloningsvideo".

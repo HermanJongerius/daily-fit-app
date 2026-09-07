@@ -263,7 +263,7 @@ export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
     </div>
     <div style="max-width:520px;margin:0 auto;width:100%;padding:24px;">
       <div style="font-size:22px;font-weight:900;margin-bottom:14px;">${esc(schedule.joint)}oefeningen</div>
-      <div style="background:${COLORS.teal100};color:${COLORS.teal900};padding:12px 16px;border-radius:12px;font-size:15px;font-weight:600;line-height:1.5;margin-bottom:14px;">Voor uw veiligheid: overleg bij twijfel met uw huisarts, stop bij pijn of duizeligheid, en oefen op eigen tempo in een veilige, opgeruimde ruimte.</div>
+      <div style="background:${COLORS.teal100};color:${COLORS.teal900};padding:12px 16px;border-radius:12px;font-size:15px;font-weight:600;line-height:1.5;margin-bottom:14px;">Voor uw veiligheid: overleg bij twijfel over deelname met uw huisarts, stop bij pijn of duizeligheid, en oefen op eigen tempo in een veilige, opgeruimde ruimte.</div>
       ${player}
       ${devNotice}${devButton}
     </div>
