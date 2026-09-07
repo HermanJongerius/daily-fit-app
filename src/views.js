@@ -338,10 +338,18 @@ export function voortgangPage({ dayInCycle, blocksRevealed, rewardVideo = null, 
     ? `<div style="font-size:14px;font-weight:800;color:${COLORS.teal900};margin-top:12px;">${esc(rewardVideo.label || 'Jouw beloningsvideo')}</div>`
     : '';
 
+  // Boven het plaatje: tijdens de cyclus zelf (nog geen video ontgrendeld) een korte
+  // uitleg van het principe, in gewone tekst (geen hoofdletters/uitgesponnen spatiëring —
+  // dat leest lastig voor een hele zin, zeker voor de doelgroep). Zodra de video wél
+  // ontgrendeld is, staat er een kort label dat aankondigt wat je nu ziet.
+  const cycleLabel = rewardVideo
+    ? `<div style="font-size:15px;font-weight:700;color:${COLORS.inkSoft};text-transform:uppercase;letter-spacing:0.06em;">Jouw beloningsvideo</div>`
+    : `<div style="font-size:15px;font-weight:700;color:${COLORS.inkSoft};line-height:1.4;">Door elke dag te bewegen openbaart zich na 7 dagen een video met een interessant &lsquo;weetje&rsquo;.</div>`;
+
   const body = `
   <div style="min-height:100vh;display:flex;flex-direction:column;background:${COLORS.cream};padding-bottom:64px;">
     <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;max-width:420px;margin:0 auto;width:100%;">
-      <div style="font-size:15px;font-weight:700;color:${COLORS.inkSoft};text-transform:uppercase;letter-spacing:0.06em;">${rewardVideo ? 'Jouw beloningsvideo' : 'Jouw cyclus'}</div>
+      ${cycleLabel}
       <div style="width:100%;aspect-ratio:${rewardVideo ? '16/9' : '4/3'};border-radius:20px;overflow:hidden;position:relative;margin-top:14px;box-shadow:0 2px 10px rgba(0,0,0,0.08);">
         ${pictureArea}
       </div>
