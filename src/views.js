@@ -73,14 +73,18 @@ export function loginPage({ error }) {
   return layout({ title: 'Inloggen', body });
 }
 
-export function vandaagPage({ user, schedule, done, weekDots }) {
+export function vandaagPage({ user, schedule, done, videosDoneToday = 0, weekDots }) {
   const today = new Date();
   const joint = jointForDate(today);
   const tomorrow = new Date(today.getTime() + 86400000);
   const tomorrowJoint = jointForDate(tomorrow);
 
+  // Sinds versie 1.11.0 is "schedule" een lijst van (tot) 4 video's voor vandaag (slot 1
+  // t/m 4) i.p.v. één enkele video — zie schema.sql en /vandaag in app.js.
+  const allReady = schedule.length === 4 && schedule.every((s) => s.video_status === 'ready');
+
   let center;
-  if (!schedule) {
+  if (schedule.length === 0) {
     center = `<div style="font-size:20px;font-weight:800;margin-top:16px;">Nog geen oefeningen gepland</div>
       <div style="font-size:15px;font-weight:600;color:${COLORS.inkSoft};margin-top:6px;">Kom later terug, of vraag de beheerder om de planning aan te vullen.</div>`;
   } else if (done) {
@@ -88,14 +92,19 @@ export function vandaagPage({ user, schedule, done, weekDots }) {
         <svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="${COLORS.teal700}" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg></div>
       <div style="font-size:26px;font-weight:900;margin-top:16px;">Tot morgen! Je bent al klaar.</div>
       <div style="font-size:16px;font-weight:600;color:${COLORS.inkSoft};margin-top:8px;">Morgen staan de ${esc(tomorrowJoint.toLowerCase())}oefeningen klaar.</div>`;
-  } else if (schedule.video_status !== 'ready') {
+  } else if (!allReady) {
     center = `<div style="font-size:20px;font-weight:800;margin-top:16px;">De oefeningen van vandaag worden nog klaargezet</div>
       <div style="font-size:15px;font-weight:600;color:${COLORS.inkSoft};margin-top:6px;">Probeer het over een paar minuten opnieuw.</div>`;
   } else {
+    // Was de deelnemer al met een deel van de 4 video's bezig (bijv. eerder vandaag
+    // gestopt)? Dan gaat de knop verder bij de eerstvolgende, nog niet afgevinkte video —
+    // zie nextUnfinishedSlot in app.js — en zegt de tekst dat er nog een paar te gaan zijn,
+    // in plaats van opnieuw "Start de oefeningen" te tonen alsof er nog niets is gedaan.
+    const buttonLabel = videosDoneToday > 0 ? `Verder — ${videosDoneToday} van de 4 gedaan` : 'Start de oefeningen';
     center = `<div style="font-size:15px;font-weight:700;color:${COLORS.inkSoft};text-transform:uppercase;letter-spacing:0.06em;">Vandaag</div>
       <div style="font-size:34px;font-weight:900;color:${COLORS.teal900};margin-top:6px;">${esc(joint)}oefeningen</div>
       <a href="/video" style="margin-top:24px;display:inline-flex;align-items:center;gap:10px;height:64px;padding:0 36px;border-radius:20px;background:${COLORS.coral600};color:${COLORS.white};font-size:19px;font-weight:800;text-decoration:none;">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg> Start de oefeningen</a>`;
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor"><polygon points="6 3 20 12 6 21 6 3"></polygon></svg> ${esc(buttonLabel)}</a>`;
   }
 
   const body = `
@@ -113,7 +122,7 @@ export function vandaagPage({ user, schedule, done, weekDots }) {
   return layout({ title: 'Vandaag', body });
 }
 
-export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
+export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec, slot = 1, totalSlots = 1, completedSlots = [] }) {
   // Bij een echte video wordt de Cloudflare Stream-speler-SDK geladen zodat we kunnen
   // herkennen wanneer het afspelen voltooid is: pas dan tellen de oefeningen als gedaan en
   // wordt automatisch naar /vandaag doorgestuurd (waar de server het al blokkeert om
@@ -256,13 +265,38 @@ export function videoPage({ schedule, streamEmbedSrc, devMode, durationSec }) {
   const devButton = devMode
     ? `<form method="post" action="/video/complete" style="margin-top:14px;"><button type="submit" style="height:52px;padding:0 28px;border:none;border-radius:16px;background:${COLORS.teal700};color:${COLORS.white};font-family:inherit;font-size:15px;font-weight:800;">(dev) Markeer als uitgekeken</button></form>`
     : '';
+
+  // Voortgangsrij: een oefening per dag is sinds versie 1.11.0 opgeknipt in 4 losse video's
+  // (een gewricht vanuit meerdere kanten bewegen). Elk bolletje toont of die video al is
+  // afgevinkt (vinkje), nu aan de beurt is (dikke rand), of nog moet komen (grijs) — zodat
+  // voor de deelnemer altijd duidelijk is waar hij is in de reeks van 4. Bij totalSlots===1
+  // (bijv. oudere/losse aanroepen) wordt deze rij niet getoond.
+  let progressRow = '';
+  if (totalSlots > 1) {
+    const completedSet = new Set(completedSlots);
+    const dots = [];
+    for (let i = 1; i <= totalSlots; i++) {
+      const isDone = completedSet.has(i);
+      const isCurrent = i === slot;
+      const bg = isDone ? COLORS.teal700 : COLORS.white;
+      const border = isCurrent ? `3px solid ${COLORS.coral600}` : `2px solid ${COLORS.border}`;
+      const inner = isDone
+        ? `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="${COLORS.white}" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"></polyline></svg>`
+        : `<span style="font-size:13px;font-weight:800;color:${isCurrent ? COLORS.coral600 : COLORS.inkSoft};">${i}</span>`;
+      dots.push(`<div style="width:32px;height:32px;border-radius:50%;background:${bg};border:${border};display:flex;align-items:center;justify-content:center;">${inner}</div>`);
+    }
+    progressRow = `<div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">${dots.join('<div style="flex:1;height:2px;background:' + COLORS.border + ';"></div>')}</div>
+      <div style="font-size:13px;font-weight:700;color:${COLORS.inkSoft};margin-bottom:10px;">Oefening ${slot} van ${totalSlots}</div>`;
+  }
+
   const body = `
   <div style="min-height:100vh;display:flex;flex-direction:column;background:${COLORS.cream};padding-bottom:64px;">
     <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 22px 0;">
       <a href="/vandaag" style="text-decoration:none;font-size:13px;font-weight:700;color:${COLORS.inkSoft};">&larr; Terug</a>
     </div>
     <div style="max-width:520px;margin:0 auto;width:100%;padding:24px;">
-      <div style="font-size:22px;font-weight:900;margin-bottom:14px;">${esc(schedule.joint)}oefeningen</div>
+      <div style="font-size:22px;font-weight:900;margin-bottom:14px;">${esc(schedule.joint)}oefeningen${schedule.video_label ? ` — ${esc(schedule.video_label)}` : ''}</div>
+      ${progressRow}
       <div style="background:${COLORS.teal100};color:${COLORS.teal900};padding:12px 16px;border-radius:12px;font-size:15px;font-weight:600;line-height:1.5;margin-bottom:14px;">Voor uw veiligheid: overleg bij twijfel over deelname met uw huisarts, stop bij pijn of duizeligheid, en oefen op eigen tempo in een veilige, opgeruimde ruimte.</div>
       ${player}
       ${devNotice}${devButton}
@@ -425,27 +459,41 @@ function videoStatusBadge(s) {
   return `<span style="background:${bg};color:${fg};padding:3px 10px;border-radius:999px;font-size:11px;font-weight:800;">${label}</span>`;
 }
 
+// Sinds versie 1.11.0 staan er per dag 4 video's gepland (slot 1 t/m 4) i.p.v. 1 — een
+// gewricht moet vanuit meerdere kanten bewogen worden. "days" bevat dus per dag een
+// "slots"-lijst van 4 (zie /admin/planning in app.js) i.p.v. één enkele video per dag.
 export function planningPage({ days, cfConfigured }) {
-  const plannedCount = days.filter((d) => d.video_status === 'ready').length;
-  const rows = days.map((d) => `
-    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border:1px solid ${COLORS.border};border-radius:14px;background:${COLORS.white};margin-bottom:10px;">
-      <div>
+  const totalSlots = days.length * 4;
+  const readySlots = days.reduce((n, d) => n + d.slots.filter((s) => s.video_status === 'ready').length, 0);
+  const rows = days.map((d) => {
+    const slotRows = d.slots.map((s) => `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:10px 12px;border-top:1px solid ${COLORS.border};">
+        <div>
+          <div style="font-size:13px;font-weight:800;">Video ${s.slot} ${videoStatusBadge(s.video_status)}</div>
+          <div style="font-size:12px;color:${COLORS.inkSoft};margin-top:2px;">${s.video_label ? esc(s.video_label) : 'nog geen video geüpload'}</div>
+        </div>
+        <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
+          <input type="file" accept="video/*" data-upload-date="${d.date}" data-upload-slot="${s.slot}" ${cfConfigured ? '' : 'disabled'} style="font-size:12px;max-width:180px;" />
+          <span data-status-for="${d.date}:${s.slot}" style="font-size:11px;color:${COLORS.inkSoft};"></span>
+        </div>
+      </div>`).join('');
+    const dayReadyCount = d.slots.filter((s) => s.video_status === 'ready').length;
+    return `
+    <div style="border:1px solid ${COLORS.border};border-radius:14px;background:${COLORS.white};margin-bottom:10px;overflow:hidden;">
+      <div style="padding:14px 16px;">
         <div style="font-size:13px;font-weight:700;color:${COLORS.inkSoft};">${fmtDateLong(d.date)}</div>
-        <div style="font-size:16px;font-weight:800;">${esc(d.joint)}oefeningen ${videoStatusBadge(d.video_status)}</div>
-        <div style="font-size:12px;color:${COLORS.inkSoft};margin-top:2px;">${d.video_label ? esc(d.video_label) : 'nog geen video geüpload'}</div>
+        <div style="font-size:16px;font-weight:800;">${esc(d.joint)}oefeningen — ${dayReadyCount} van de 4 klaar</div>
       </div>
-      <div style="display:flex;flex-direction:column;gap:6px;align-items:flex-end;">
-        <input type="file" accept="video/*" data-upload-date="${d.date}" ${cfConfigured ? '' : 'disabled'} style="font-size:12px;max-width:180px;" />
-        <span data-status-for="${d.date}" style="font-size:11px;color:${COLORS.inkSoft};"></span>
-      </div>
-    </div>`).join('');
+      ${slotRows}
+    </div>`;
+  }).join('');
 
   const notConfiguredNotice = cfConfigured ? '' : `<div style="background:#FBEDD3;color:${COLORS.amber600};padding:10px 14px;border-radius:12px;font-size:13px;font-weight:700;margin-bottom:16px;">Cloudflare Stream is nog niet ingesteld op de server (CLOUDFLARE_ACCOUNT_ID / CLOUDFLARE_API_TOKEN). Video-upload staat daarom uit.</div>`;
 
   const body = `
     <div style="margin-bottom:20px;">
       <div style="font-size:24px;font-weight:900;">Planning</div>
-      <div style="font-size:14px;font-weight:600;color:${COLORS.inkSoft};margin-top:4px;">${plannedCount} van de ${days.length} dagen heeft een klare video. Kies per dag een videobestand om te uploaden.</div>
+      <div style="font-size:14px;font-weight:600;color:${COLORS.inkSoft};margin-top:4px;">${readySlots} van de ${totalSlots} video's staat klaar (4 per dag — een gewricht vanuit meerdere kanten bewegen vraagt om 4 losse oefeningen). Kies per video een bestand om te uploaden.</div>
     </div>
     ${notConfiguredNotice}
     ${rows}
@@ -453,12 +501,13 @@ export function planningPage({ days, cfConfigured }) {
       document.querySelectorAll('input[data-upload-date]').forEach(function (input) {
         input.addEventListener('change', async function () {
           var date = input.getAttribute('data-upload-date');
-          var statusEl = document.querySelector('[data-status-for="' + date + '"]');
+          var slot = input.getAttribute('data-upload-slot');
+          var statusEl = document.querySelector('[data-status-for="' + date + ':' + slot + '"]');
           var file = input.files[0];
           if (!file) return;
           statusEl.textContent = 'Upload-link aanvragen...';
           try {
-            var res = await fetch('/admin/planning/' + date + '/upload-url', { method: 'POST' });
+            var res = await fetch('/admin/planning/' + date + '/' + slot + '/upload-url', { method: 'POST' });
             var data = await res.json();
             if (!res.ok) throw new Error(data.error || 'Onbekende fout');
             statusEl.textContent = 'Video uploaden...';
@@ -467,7 +516,7 @@ export function planningPage({ days, cfConfigured }) {
             var uploadRes = await fetch(data.uploadUrl, { method: 'POST', body: form });
             if (!uploadRes.ok) throw new Error('Upload naar Cloudflare mislukt');
             statusEl.textContent = 'Wordt verwerkt door Cloudflare...';
-            await fetch('/admin/planning/' + date + '/attach', {
+            await fetch('/admin/planning/' + date + '/' + slot + '/attach', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ uid: data.uid, label: file.name }),

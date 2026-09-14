@@ -92,13 +92,25 @@ app.get('/vandaag', requireRole('senior'), async (req, res) => {
   if (isExpired(req.user)) return res.send(views.expiredPage({ user: req.user }));
 
   const today = todayIso();
-  const { rows: schedRows } = await pool.query('SELECT * FROM schedule WHERE date = $1', [today]);
-  const schedule = schedRows[0] || null;
+  // Sinds versie 1.11.0 staan er per dag 4 video's gepland (slot 1 t/m 4) i.p.v. 1 — zie
+  // schema.sql. "schedule" is dus voortaan een lijst (0 t/m 4 rijen), niet meer één rij.
+  const { rows: schedule } = await pool.query('SELECT * FROM schedule WHERE date = $1 ORDER BY slot', [today]);
 
   const { rows: doneRows } = await pool.query(
     'SELECT 1 FROM completions WHERE user_id = $1 AND date = $2', [req.user.id, today]
   );
   const done = doneRows.length > 0;
+
+  // Voor de tekst op de startknop ("Start de oefeningen" vs. "Verder — 2 van 4 gedaan"):
+  // hoeveel van de 4 video's van vandaag heeft deze deelnemer al afgevinkt? Alleen relevant
+  // als de dag nog niet als geheel is afgerond (done=false).
+  let videosDoneToday = 0;
+  if (!done) {
+    const { rows: vcRows } = await pool.query(
+      'SELECT COUNT(*)::int AS n FROM video_completions WHERE user_id = $1 AND date = $2', [req.user.id, today]
+    );
+    videosDoneToday = vcRows[0].n;
+  }
 
   // voortgang van de huidige week (altijd maandag t/m zondag, in die volgorde), voor de
   // puntjes-weergave — niet de laatste 7 dagen teruggerekend vanaf vandaag.
@@ -121,8 +133,23 @@ app.get('/vandaag', requireRole('senior'), async (req, res) => {
     dots.push(`<span title="${iso}" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;margin:0 3px;font-size:11px;font-weight:800;background:${isDone ? '#3A6B60' : '#E7DFCF'};color:${isDone ? '#FBF6EC' : '#746C5F'};">${letter}</span>`);
   }
 
-  res.send(views.vandaagPage({ user: req.user, schedule, done, weekDots: dots.join('') }));
+  res.send(views.vandaagPage({ user: req.user, schedule, done, videosDoneToday, weekDots: dots.join('') }));
 });
+
+// Bepaalt server-side (dus niet te beïnvloeden vanaf de client) welk van de 4 video's van
+// vandaag voor deze deelnemer nu aan de beurt is: het laagste slotnummer (1-4) dat nog geen
+// rij in video_completions heeft. Wordt zowel door GET /video (welke video tonen) als door
+// POST /video/complete (welke video als afgerond markeren) gebruikt, zodat afvinken altijd
+// keurig op volgorde gaat — ook als iemand de pagina ververst of het scherm sluit en later
+// diezelfde dag terugkomt (dan gaat het gewoon verder bij de eerstvolgende, niet-afgevinkte
+// video, zie technisch-ontwerp.md sectie 4a).
+async function nextUnfinishedSlot(userId, dateIso) {
+  const { rows } = await pool.query(
+    'SELECT slot FROM video_completions WHERE user_id = $1 AND date = $2', [userId, dateIso]
+  );
+  const done = new Set(rows.map((r) => r.slot));
+  return [1, 2, 3, 4].find((s) => !done.has(s)) || null;
+}
 
 app.get('/video', requireRole('senior'), async (req, res) => {
   if (isExpired(req.user)) return res.redirect('/vandaag');
@@ -133,9 +160,15 @@ app.get('/video', requireRole('senior'), async (req, res) => {
   );
   if (doneRows.length > 0) return res.redirect('/vandaag');
 
-  const { rows: schedRows } = await pool.query('SELECT * FROM schedule WHERE date = $1', [today]);
-  const schedule = schedRows[0];
-  if (!schedule) return res.redirect('/vandaag');
+  const { rows: schedRows } = await pool.query('SELECT * FROM schedule WHERE date = $1 ORDER BY slot', [today]);
+  // Pas beginnen als alle 4 slots klaarstaan — anders (net als vroeger bij 1 video) terug
+  // naar "Vandaag", dat dan de "wordt nog klaargezet"-tekst toont.
+  if (schedRows.length < 4 || schedRows.some((s) => s.video_status !== 'ready')) return res.redirect('/vandaag');
+
+  const slot = await nextUnfinishedSlot(req.user.id, today);
+  if (!slot) return res.redirect('/vandaag'); // veiligheid: zou hier niet moeten kunnen komen
+  const schedule = schedRows.find((s) => s.slot === slot);
+  const completedSlots = schedRows.filter((s) => s.slot < slot).map((s) => s.slot);
 
   let streamEmbedSrc = null;
   if (cfConfigured && schedule.video_status === 'ready' && schedule.video_uid && process.env.CLOUDFLARE_STREAM_CUSTOMER_CODE) {
@@ -147,16 +180,41 @@ app.get('/video', requireRole('senior'), async (req, res) => {
     }
   }
 
-  res.send(views.videoPage({ schedule, streamEmbedSrc, devMode: !streamEmbedSrc, durationSec: schedule.duration_sec }));
+  res.send(views.videoPage({
+    schedule, streamEmbedSrc, devMode: !streamEmbedSrc, durationSec: schedule.duration_sec,
+    slot, totalSlots: 4, completedSlots,
+  }));
 });
 
 app.post('/video/complete', requireRole('senior'), async (req, res) => {
   const today = todayIso();
-  await pool.query(
-    'INSERT INTO completions (user_id, date) VALUES ($1, $2) ON CONFLICT (user_id, date) DO NOTHING',
-    [req.user.id, today]
+  // Welk slot dit precies is, bepaalt de server zelf (zie nextUnfinishedSlot hierboven) —
+  // er wordt geen slotnummer van de client aangenomen, zodat afvinken altijd op volgorde
+  // gaat, ook als iemand handmatig een POST naar deze route zou proberen te sturen.
+  const slot = await nextUnfinishedSlot(req.user.id, today);
+  if (slot) {
+    await pool.query(
+      'INSERT INTO video_completions (user_id, date, slot) VALUES ($1, $2, $3) ON CONFLICT (user_id, date, slot) DO NOTHING',
+      [req.user.id, today, slot]
+    );
+  }
+  const { rows: countRows } = await pool.query(
+    'SELECT COUNT(*)::int AS n FROM video_completions WHERE user_id = $1 AND date = $2', [req.user.id, today]
   );
-  res.redirect('/voortgang');
+  if (countRows[0].n >= 4) {
+    // Alle 4 video's van vandaag zijn afgevinkt: pas nú telt de dag als voltooid — dit is de
+    // enige plek die in completions schrijft, dus alle bestaande logica die daarop steunt
+    // (cyclus, dagbolletjes, trainingsstatistiek, beloningsvideo's) blijft ongewijzigd werken.
+    await pool.query(
+      'INSERT INTO completions (user_id, date) VALUES ($1, $2) ON CONFLICT (user_id, date) DO NOTHING',
+      [req.user.id, today]
+    );
+    return res.redirect('/voortgang');
+  }
+  // Nog niet alle 4 gedaan: terug naar /video, dat vanzelf de eerstvolgende, nog niet
+  // afgevinkte video laat zien — met het startscherm ("Start de video") ervoor, dat de
+  // deelnemer zelf moet aantikken. Dat is de "zelf klikken tussen de video's"-stap.
+  res.redirect('/video');
 });
 
 // --- voortgangsscherm (het "onthullingsscherm"): verschijnt na elke training, toont de
@@ -216,6 +274,8 @@ app.get('/voortgang', requireRole('senior'), async (req, res) => {
 });
 
 // --- beheerder: planning ---
+// Sinds versie 1.11.0 staan er per dag 4 video's gepland (slot 1 t/m 4) i.p.v. 1 — een
+// gewricht moet vanuit meerdere kanten bewogen worden. Elke dag krijgt dus 4 upload-slots.
 app.get('/admin/planning', requireRole('admin'), async (req, res) => {
   // Start bij "vandaag" volgens de Nederlandse klok (todayIso), niet volgens de tijdzone
   // van de server zelf — zie de toelichting bij APP_TIMEZONE in helpers.js.
@@ -227,11 +287,19 @@ app.get('/admin/planning', requireRole('admin'), async (req, res) => {
     days.push({ date: iso, joint: jointForDate(d) });
   }
   const { rows } = await pool.query(
-    'SELECT * FROM schedule WHERE date >= $1 AND date < $1::date + interval \'14 days\' ORDER BY date',
+    'SELECT * FROM schedule WHERE date >= $1 AND date < $1::date + interval \'14 days\' ORDER BY date, slot',
     [days[0].date]
   );
-  const byDate = new Map(rows.map((r) => [isoDateLocal(r.date), r]));
-  const merged = days.map((d) => ({ ...d, ...(byDate.get(d.date) || {}), date: d.date }));
+  const bySlot = new Map(rows.map((r) => [`${isoDateLocal(r.date)}:${r.slot}`, r]));
+  const merged = days.map((d) => ({
+    ...d,
+    slots: [1, 2, 3, 4].map((slot) => ({
+      slot,
+      video_status: 'none',
+      ...(bySlot.get(`${d.date}:${slot}`) || {}),
+      date: d.date, // altijd de iso-string gebruiken, niet het Date-object dat pg voor "date" teruggeeft
+    })),
+  }));
 
   // Cloudflare is soms nog even bezig met het verwerken van een net geüploade video
   // (de status stond op "processing" op het moment dat 'ie gekoppeld werd). Elke keer
@@ -240,19 +308,21 @@ app.get('/admin/planning', requireRole('admin'), async (req, res) => {
   // — zonder dat de beheerder daar iets voor hoeft te doen.
   if (cfConfigured) {
     for (const day of merged) {
-      if (day.video_status === 'processing' && day.video_uid) {
-        try {
-          const status = await getVideoStatus(day.video_uid);
-          if (status.ready) {
-            await pool.query(
-              'UPDATE schedule SET video_status = $2, duration_sec = $3, updated_at = now() WHERE date = $1',
-              [day.date, 'ready', status.durationSec]
-            );
-            day.video_status = 'ready';
-            day.duration_sec = status.durationSec;
+      for (const s of day.slots) {
+        if (s.video_status === 'processing' && s.video_uid) {
+          try {
+            const status = await getVideoStatus(s.video_uid);
+            if (status.ready) {
+              await pool.query(
+                'UPDATE schedule SET video_status = $3, duration_sec = $4, updated_at = now() WHERE date = $1 AND slot = $2',
+                [day.date, s.slot, 'ready', status.durationSec]
+              );
+              s.video_status = 'ready';
+              s.duration_sec = status.durationSec;
+            }
+          } catch (err) {
+            console.error(`Kon status van video ${s.video_uid} (${day.date}, slot ${s.slot}) niet verversen:`, err.message);
           }
-        } catch (err) {
-          console.error(`Kon status van video ${day.video_uid} (${day.date}) niet verversen:`, err.message);
         }
       }
     }
@@ -261,7 +331,7 @@ app.get('/admin/planning', requireRole('admin'), async (req, res) => {
   res.send(views.planningPage({ days: merged, cfConfigured }));
 });
 
-app.post('/admin/planning/:date/upload-url', requireRole('admin'), async (req, res) => {
+app.post('/admin/planning/:date/:slot/upload-url', requireRole('admin'), async (req, res) => {
   try {
     const { uploadUrl, uid } = await createDirectUploadUrl();
     res.json({ uploadUrl, uid });
@@ -270,18 +340,22 @@ app.post('/admin/planning/:date/upload-url', requireRole('admin'), async (req, r
   }
 });
 
-app.post('/admin/planning/:date/attach', requireRole('admin'), async (req, res) => {
+app.post('/admin/planning/:date/:slot/attach', requireRole('admin'), async (req, res) => {
   const { date } = req.params;
+  const slot = parseInt(req.params.slot, 10);
   const { uid, label } = req.body;
+  if (!Number.isInteger(slot) || slot < 1 || slot > 4) {
+    return res.status(400).json({ error: 'Ongeldig slotnummer (moet 1 t/m 4 zijn).' });
+  }
   const d = new Date(date + 'T00:00:00');
   const joint = jointForDate(d);
   try {
     const status = await getVideoStatus(uid);
     await pool.query(
-      `INSERT INTO schedule (date, joint, video_uid, video_label, duration_sec, video_status, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, now())
-       ON CONFLICT (date) DO UPDATE SET joint = $2, video_uid = $3, video_label = $4, duration_sec = $5, video_status = $6, updated_at = now()`,
-      [date, joint, uid, label || null, status.durationSec, status.ready ? 'ready' : 'processing']
+      `INSERT INTO schedule (date, slot, joint, video_uid, video_label, duration_sec, video_status, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+       ON CONFLICT (date, slot) DO UPDATE SET joint = $3, video_uid = $4, video_label = $5, duration_sec = $6, video_status = $7, updated_at = now()`,
+      [date, slot, joint, uid, label || null, status.durationSec, status.ready ? 'ready' : 'processing']
     );
     res.json({ ok: true, ready: status.ready });
   } catch (err) {

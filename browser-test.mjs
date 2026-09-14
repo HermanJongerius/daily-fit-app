@@ -17,6 +17,22 @@ const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromi
 const page = await browser.newPage();
 page.on('pageerror', (err) => console.log('PAGE ERROR:', err.message));
 
+// --- schedule voor vandaag klaarzetten: 4 klaarstaande video-slots. Sinds versie 1.11.0
+// staan er per dag 4 video's gepland i.p.v. 1 (zie schema.sql), en deze testreeks moet daar
+// niet stilzwijgend van afhankelijk zijn van eerder handmatig ingevoerde (en inmiddels
+// verouderde) planningsdata — dus hier expliciet zelf klaarzetten, ongeacht wat er al stond.
+{
+  const today = todayIso();
+  for (let slot = 1; slot <= 4; slot++) {
+    await pool.query(
+      `INSERT INTO schedule (date, slot, joint, video_status)
+       VALUES ($1, $2, $3, 'ready')
+       ON CONFLICT (date, slot) DO UPDATE SET joint = $3, video_status = 'ready'`,
+      [today, slot, expectedJointToday]
+    );
+  }
+}
+
 // --- niet ingelogd -> /login ---
 await page.goto(BASE + '/');
 await page.waitForSelector('form[action="/login"]');
@@ -39,14 +55,26 @@ text = await page.textContent('body');
 assert(page.url().endsWith('/vandaag'), 'senior komt na login op /vandaag terecht');
 assert(text.toLowerCase().includes(expectedJointToday.toLowerCase()), `de oefening van vandaag (${expectedJointToday}) wordt getoond`);
 
-// --- naar de oefening, en in dev-modus als uitgekeken markeren ---
+// --- naar de oefeningen: sinds versie 1.11.0 staan er per dag 4 video's (een gewricht moet
+// vanuit meerdere kanten bewogen worden), die de deelnemer één voor één afvinkt — in
+// dev-modus via de "markeer als uitgekeken"-knop. Na elke video (behalve de laatste) gaat
+// de browser terug naar /video zelf, dat dan vanzelf de eerstvolgende, nog niet afgevinkte
+// video toont áchter het "Start de video"-scherm — dat opnieuw aantikken is de "zelf klikken
+// tussen de video's"-stap. Pas na de 4e video telt de hele dag als afgerond.
 await page.click('a[href="/video"]');
 await page.waitForLoadState('networkidle');
-text = await page.textContent('body');
-assert(text.includes('Ontwikkelmodus'), 'zonder Cloudflare-configuratie verschijnt de ontwikkelmodus-notitie');
-await page.click('button[type="submit"]');
-await page.waitForLoadState('networkidle');
-assert(page.url().endsWith('/voortgang'), 'na het markeren als uitgekeken verschijnt eerst het voortgangsscherm (cyclus-onthulling)');
+for (let i = 1; i <= 4; i++) {
+  text = await page.textContent('body');
+  assert(text.includes('Ontwikkelmodus'), `video ${i} van 4: zonder Cloudflare-configuratie verschijnt de ontwikkelmodus-notitie`);
+  assert(text.includes(`Oefening ${i} van 4`), `video ${i} van 4: de voortgangsbalk toont "Oefening ${i} van 4"`);
+  await page.click('button[type="submit"]');
+  await page.waitForLoadState('networkidle');
+  if (i < 4) {
+    assert(page.url().endsWith('/video'), `na video ${i} van 4 gaat het terug naar /video, klaar voor de volgende (nog geen /voortgang)`);
+  } else {
+    assert(page.url().endsWith('/voortgang'), 'na de 4e en laatste video van de dag verschijnt pas het voortgangsscherm (cyclus-onthulling)');
+  }
+}
 text = await page.textContent('body');
 assert(text.includes('vakje') || text.includes('Compleet') || text.includes('Trots op je') || text.includes('Lekker bezig'), 'voortgangsscherm toont de cyclus-onthulling of een van de eindteksten');
 const hasAutoRefresh = await page.locator('meta[http-equiv="refresh" i]').count();
@@ -222,6 +250,10 @@ assert(text.includes('Te veel mislukte pogingen'), 'na 5 mislukte pogingen wordt
   // dagen van die cyclus vullen met een voltooide training — een perfecte week.
   await pool.query('UPDATE users SET created_at = $2 WHERE id = $1', [corrieId, anchorIsoStr]);
   await pool.query('DELETE FROM completions WHERE user_id = $1', [corrieId]);
+  // Ook de per-video afvinkjes opruimen (o.a. de 4 video_completions-rijen die de vorige
+  // testblokken hierboven voor "vandaag" hebben weggeschreven) — anders telt "vandaag" al
+  // als voltooid en verstoort dat de dagbolletjes die hierna berekend worden.
+  await pool.query('DELETE FROM video_completions WHERE user_id = $1', [corrieId]);
   for (let i = 0; i < 7; i++) {
     const d = new Date(cycleStartDate.getTime() + i * 86400000);
     await pool.query(
@@ -261,6 +293,7 @@ assert(text.includes('Te veel mislukte pogingen'), 'na 5 mislukte pogingen wordt
   await pool.query('DELETE FROM reward_videos WHERE id = $1', [videoRows[0].id]);
   await pool.query('UPDATE users SET created_at = $2 WHERE id = $1', [corrieId, originalCreatedAt.toISOString()]);
   await pool.query('DELETE FROM completions WHERE user_id = $1', [corrieId]);
+  await pool.query('DELETE FROM video_completions WHERE user_id = $1', [corrieId]);
 }
 
 await browser.close();
