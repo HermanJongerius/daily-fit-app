@@ -1,4 +1,4 @@
-import { esc, fmtDateLong, jointForDate, JOINTS_BY_WEEKDAY, APP_VERSION, isoDateLocal, todayIso, STOP_REASONS, stopReasonLabel } from './helpers.js';
+import { esc, fmtDateLong, jointForDate, JOINTS_BY_WEEKDAY, APP_VERSION, isoDateLocal, todayIso, STOP_REASONS, stopReasonLabel, GROUPS } from './helpers.js';
 
 // Merkstijl, overgenomen uit de schets en de demo.
 const COLORS = {
@@ -654,6 +654,14 @@ function accessAndStopBadges(u) {
   return `<div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;">${parts.join('')}</div>`;
 }
 
+// Welke les-groep (locatie + tijdstip) een deelnemer bezoekt (sinds versie 1.13.0) — puur
+// informatief, alleen getoond als er daadwerkelijk een groep is gekozen (geen "Geen groep"-
+// regel voor iedereen die dit nog niet heeft ingevuld).
+function groupLine(u) {
+  if (u.role === 'admin' || !u.group_name) return '';
+  return `<div style="font-size:12px;font-weight:600;color:${COLORS.inkSoft};margin-top:2px;">Groep: ${esc(u.group_name)}</div>`;
+}
+
 // Klein rond fotootje naast een deelnemer in het beheerdersoverzicht (sinds versie 1.12.0) —
 // zodat de beheerder iemand bijv. aan de telefoon kan herkennen. Zolang er nog geen foto is
 // geüpload, staat er een simpel "initiaal"-plaatje in dezelfde ronde vorm, zodat de rijen met
@@ -678,6 +686,7 @@ export function usersPage({ users, error }) {
           <div>
             <div style="font-size:15px;font-weight:800;">${esc(u.display_name)}</div>
             <div style="font-size:12px;font-weight:600;color:${COLORS.inkSoft};">@${esc(u.username)}${u.role !== 'admin' && u.phone_display ? ' &middot; ' + esc(u.phone_display) : ''}</div>
+            ${groupLine(u)}
             ${paidStatusBadge(u)}
             ${accessAndStopBadges(u)}
             ${trainingStatsLine(u)}
@@ -690,6 +699,7 @@ export function usersPage({ users, error }) {
         ${u.role !== 'admin' ? `<label style="display:flex;flex-direction:column;gap:2px;font-size:11px;font-weight:700;color:${COLORS.inkSoft};">Mobiel nummer<input name="phone" value="${esc(u.phone_display || '')}" style="height:34px;border-radius:8px;border:1px solid ${COLORS.border};padding:0 8px;font-size:12px;font-family:inherit;" /></label>
         <label style="display:flex;flex-direction:column;gap:2px;font-size:11px;font-weight:700;color:${COLORS.inkSoft};">Betaald tot<input name="paidUntil" type="date" value="${u.paid_until ? new Date(u.paid_until).toISOString().slice(0, 10) : ''}" style="height:34px;border-radius:8px;border:1px solid ${COLORS.border};padding:0 8px;font-size:12px;font-family:inherit;" /></label>
         <label style="display:flex;flex-direction:column;gap:2px;font-size:11px;font-weight:700;color:${COLORS.inkSoft};">Foto<input type="file" name="photo" accept="image/png,image/jpeg,image/webp" style="font-size:11px;max-width:150px;" /></label>
+        <label style="display:flex;flex-direction:column;gap:2px;font-size:11px;font-weight:700;color:${COLORS.inkSoft};">Groep<select name="groupName" style="height:34px;border-radius:8px;border:1px solid ${COLORS.border};padding:0 6px;font-size:12px;font-family:inherit;">${GROUPS.map((g) => `<option value="${esc(g.value)}"${(u.group_name || '') === g.value ? ' selected' : ''}>${esc(g.label)}</option>`).join('')}</select></label>
         <label style="display:flex;flex-direction:column;gap:2px;font-size:11px;font-weight:700;color:${COLORS.inkSoft};">Reden van stoppen<select name="stopReason" style="height:34px;border-radius:8px;border:1px solid ${COLORS.border};padding:0 6px;font-size:12px;font-family:inherit;">${STOP_REASONS.map((r) => `<option value="${esc(r.value)}"${(u.stop_reason || '') === r.value ? ' selected' : ''}>${esc(r.label)}</option>`).join('')}</select></label>
         <label style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:${COLORS.inkSoft};height:34px;"><input type="checkbox" name="accessEnabled" ${u.access_enabled === false ? '' : 'checked'} style="width:16px;height:16px;" />Mag de website gebruiken</label>` : ''}
         <button type="submit" style="height:34px;padding:0 14px;border:none;border-radius:8px;background:${COLORS.coral600};color:${COLORS.white};font-family:inherit;font-size:12px;font-weight:800;">Opslaan</button>

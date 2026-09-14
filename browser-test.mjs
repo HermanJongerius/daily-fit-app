@@ -151,15 +151,16 @@ assert(text.includes('0611122233'), 'telefoonnummer van de nieuwe gebruiker word
   const sheet = workbook.getWorksheet('Deelnemers');
   const headerRow = sheet.getRow(1).values.slice(1);
   assert(
-    headerRow.join('|') === ['Naam', 'Mobiel nummer', 'Betaald tot', 'Status', 'Toegang', 'Reden van stoppen', 'Aangemeld op', 'Aantal keer getraind', 'Mogelijke traindagen', 'Percentage getraind'].join('|'),
+    headerRow.join('|') === ['Naam', 'Groep', 'Mobiel nummer', 'Betaald tot', 'Status', 'Toegang', 'Reden van stoppen', 'Aangemeld op', 'Aantal keer getraind', 'Mogelijke traindagen', 'Percentage getraind'].join('|'),
     'de Excel-export heeft de verwachte kolomkoppen'
   );
   const rows = [];
   sheet.eachRow((row, rowNumber) => { if (rowNumber > 1) rows.push(row.values.slice(1)); });
   const testRow = rows.find((r) => r[0] === 'Test Persoon');
   assert(!!testRow, 'de nieuw aangemaakte senior staat ook in de Excel-export');
-  assert(testRow[1] === '0611122233', 'het telefoonnummer in de export klopt');
-  assert(testRow[4] === 'Actief' && testRow[5] === 'Nog actief', 'een nieuwe deelnemer staat in de export met toegang "Actief" en reden "Nog actief"');
+  assert(testRow[1] === 'Geen groep', 'een nieuwe deelnemer staat in de export met groep "Geen groep" (nog niet ingevuld)');
+  assert(testRow[2] === '0611122233', 'het telefoonnummer in de export klopt');
+  assert(testRow[5] === 'Actief' && testRow[6] === 'Nog actief', 'een nieuwe deelnemer staat in de export met toegang "Actief" en reden "Nog actief"');
   assert(!rows.some((r) => r[0] === 'Beheerder'), 'het beheerder-account zelf staat niet tussen de deelnemers in de export');
 }
 
@@ -217,16 +218,19 @@ assert(text.includes('bestaat al'), 'dubbele gebruikersnaam geeft een foutmeldin
   assert((photoResp.headers()['content-type'] || '').startsWith('image/'), 'de foto komt terug met een afbeeldings-content-type');
 }
 
-// --- reden van stoppen (pulldown) en toegangs-vinkje: twee losse velden per deelnemer (nieuw,
-// versie 1.12.0). De pulldown is puur informatief; het vinkje bepaalt écht of iemand nog bij
-// de dagelijkse oefening kan komen (los van de betaaldatum). ---
+// --- groep, reden van stoppen (pulldowns) en toegangs-vinkje: drie losse velden per
+// deelnemer (groep sinds versie 1.13.0, de andere twee sinds 1.12.0). De pulldowns zijn puur
+// informatief; het vinkje bepaalt écht of iemand nog bij de dagelijkse oefening kan komen
+// (los van de betaaldatum). ---
 {
   const testpFormSel = 'form[action="/admin/gebruikers/testp"]';
+  await page.selectOption(`${testpFormSel} select[name="groupName"]`, 'Roef 09.30');
   await page.selectOption(`${testpFormSel} select[name="stopReason"]`, 'gezondheid');
   await page.setChecked(`${testpFormSel} input[name="accessEnabled"]`, false);
   await page.click(`${testpFormSel} button[type="submit"]`);
   await page.waitForLoadState('networkidle');
   text = await page.textContent('body');
+  assert(text.includes('Groep: Roef 09.30'), 'de gekozen groep verschijnt op de kaart van de deelnemer');
   assert(text.includes('Gezondheidsredenen'), 'de gekozen reden van stoppen verschijnt als badge op de kaart van de deelnemer');
   assert(text.includes('Toegang uitgezet'), 'het uitzetten van het toegangs-vinkje verschijnt als badge op de kaart van de deelnemer');
 
@@ -256,12 +260,14 @@ assert(text.includes('bestaat al'), 'dubbele gebruikersnaam geeft een foutmeldin
   await page.waitForLoadState('networkidle');
   await page.click('a[href="/admin/gebruikers"]');
   await page.waitForLoadState('networkidle');
+  await page.selectOption(`${testpFormSel} select[name="groupName"]`, '');
   await page.selectOption(`${testpFormSel} select[name="stopReason"]`, '');
   await page.setChecked(`${testpFormSel} input[name="accessEnabled"]`, true);
   await page.click(`${testpFormSel} button[type="submit"]`);
   await page.waitForLoadState('networkidle');
   text = await page.textContent('body');
   assert(!text.includes('Toegang uitgezet'), 'toegang weer aanzetten verwijdert de badge weer');
+  assert(!text.includes('Groep: Roef 09.30'), 'de groep weer op "Geen groep" zetten verwijdert de "Groep: ..."-regel weer');
 }
 
 // --- betaaldatum van corrie in het verleden zetten via het bewerkformulier ---

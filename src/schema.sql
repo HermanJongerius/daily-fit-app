@@ -39,6 +39,11 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_updated_at TIMESTAMPTZ;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS stop_reason TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS access_enabled BOOLEAN NOT NULL DEFAULT true;
 
+-- Bij welke les-groep (locatie + tijdstip) een deelnemer hoort, sinds versie 1.13.0 — net als
+-- "stop_reason" hierboven puur informatief (een pulldown-keuze uit een vaste lijst, zie
+-- GROUPS in helpers.js), zonder enig effect op de werking van de app.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS group_name TEXT;
+
 -- Per dag staan er (sinds versie 1.11.0) 4 losse video's gepland i.p.v. 1 — een gewricht
 -- moet vanuit meerdere kanten bewogen worden, en dat vraagt om 4 losse oefeningen/video's
 -- (bijv. "Nek — rotatie links/rechts", "Nek — voor/achter buigen", ...). "slot" is het

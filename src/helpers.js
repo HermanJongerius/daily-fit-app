@@ -111,6 +111,24 @@ export function stopReasonLabel(value) {
   return (STOP_REASONS.find((r) => r.value === (value || ''))?.label) || 'Nog actief';
 }
 
+// Vaste lijst voor de pulldown "Groep" in het beheerdersoverzicht (sinds versie 1.13.0) —
+// welke les-groep (locatie + tijdstip) een deelnemer bezoekt. Net als STOP_REASONS hierboven
+// puur informatief, geen effect op de werking van de app.
+export const GROUPS = [
+  { value: '', label: 'Geen groep' },
+  { value: 'Roef 09.30', label: 'Roef 09.30' },
+  { value: 'Roef 10.30', label: 'Roef 10.30' },
+  { value: 'Schakel 09.30', label: 'Schakel 09.30' },
+  { value: 'Schakel 10.15', label: 'Schakel 10.15' },
+  { value: 'Inbalans Roef', label: 'Inbalans Roef' },
+  { value: 'Inbalans Schakel', label: 'Inbalans Schakel' },
+  { value: 'Anders', label: 'Anders' },
+];
+
+export function groupLabel(value) {
+  return (GROUPS.find((g) => g.value === (value || ''))?.label) || 'Geen groep';
+}
+
 export function esc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;')

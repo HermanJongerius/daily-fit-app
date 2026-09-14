@@ -8,7 +8,7 @@ import {
   clearFailedAttempts, createSession, destroySession, userForSessionToken,
   sessionCookieOptions, SESSION_COOKIE, isExpired, isAccessDisabled,
 } from './auth.js';
-import { jointForDate, isoDateLocal, todayIso, weekdayInAppTz, JOINTS_BY_WEEKDAY, DAY_LETTERS_BY_WEEKDAY, cycleInfoForUser, daysPossibleSince, stopReasonLabel } from './helpers.js';
+import { jointForDate, isoDateLocal, todayIso, weekdayInAppTz, JOINTS_BY_WEEKDAY, DAY_LETTERS_BY_WEEKDAY, cycleInfoForUser, daysPossibleSince, stopReasonLabel, groupLabel } from './helpers.js';
 import { createDirectUploadUrl, getVideoStatus, createSignedPlaybackToken } from './cloudflareStream.js';
 import * as views from './views.js';
 
@@ -463,7 +463,7 @@ async function loadUsersWithStats() {
   const { rows } = await pool.query(
     `SELECT id, username, role, display_name, phone, phone_display, paid_until,
             failed_attempts, locked_until, created_at, photo_mime, photo_updated_at,
-            stop_reason, access_enabled
+            stop_reason, access_enabled, group_name
      FROM users ORDER BY role DESC, display_name`
   );
   const { rows: completionCounts } = await pool.query(
@@ -499,6 +499,7 @@ app.get('/admin/gebruikers/export', requireRole('admin'), async (req, res) => {
 
   sheet.columns = [
     { header: 'Naam', key: 'naam', width: 26 },
+    { header: 'Groep', key: 'groep', width: 18 },
     { header: 'Mobiel nummer', key: 'telefoon', width: 18 },
     { header: 'Betaald tot', key: 'betaaldTot', width: 14, style: { numFmt: 'dd-mm-yyyy' } },
     { header: 'Status', key: 'status', width: 16 },
@@ -521,6 +522,7 @@ app.get('/admin/gebruikers/export', requireRole('admin'), async (req, res) => {
         : 'Actief';
     sheet.addRow({
       naam: u.display_name,
+      groep: groupLabel(u.group_name),
       telefoon: u.phone_display || '',
       betaaldTot: u.paid_until ? new Date(u.paid_until) : null,
       status,
@@ -611,6 +613,7 @@ app.post('/admin/gebruikers/:username', requireRole('admin'), uploadPhotoMiddlew
     // worden — anders zou uitvinken van het vinkje nooit aankomen bij de server.
     fields.push(`stop_reason = $${params.length + 1}`); params.push(req.body.stopReason || null);
     fields.push(`access_enabled = $${params.length + 1}`); params.push(req.body.accessEnabled === 'on');
+    fields.push(`group_name = $${params.length + 1}`); params.push(req.body.groupName || null);
     // Alleen als er daadwerkelijk een nieuw bestand is gekozen — een leeg gelaten
     // fotoveldje mag de al opgeslagen foto niet per ongeluk wissen.
     if (req.file) {
