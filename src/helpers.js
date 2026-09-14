@@ -93,6 +93,24 @@ export function daysPossibleSince(createdAt, todayIsoStr) {
   return days + 1; // inclusief vandaag
 }
 
+// Vaste lijst voor de pulldown "Reden van stoppen" in het beheerdersoverzicht (sinds versie
+// 1.12.0) — puur informatief voor Hermans eigen administratie, heeft zelf geen effect op de
+// werking van de app (zie schema.sql en isAccessDisabled in auth.js voor het aparte
+// toegangs-vinkje, dat wél effect heeft). "" (leeg) betekent "nog gewoon actief".
+export const STOP_REASONS = [
+  { value: '', label: 'Nog actief' },
+  { value: 'gezondheid', label: 'Gezondheidsredenen' },
+  { value: 'verhuisd', label: 'Verhuisd' },
+  { value: 'financieel', label: 'Financiële redenen' },
+  { value: 'overleden', label: 'Overleden' },
+  { value: 'geen_interesse', label: 'Geen interesse/motivatie meer' },
+  { value: 'anders', label: 'Anders' },
+];
+
+export function stopReasonLabel(value) {
+  return (STOP_REASONS.find((r) => r.value === (value || ''))?.label) || 'Nog actief';
+}
+
 export function esc(s) {
   return String(s == null ? '' : s)
     .replace(/&/g, '&amp;')

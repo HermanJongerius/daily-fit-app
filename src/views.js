@@ -1,4 +1,4 @@
-import { esc, fmtDateLong, jointForDate, JOINTS_BY_WEEKDAY, APP_VERSION, isoDateLocal, todayIso } from './helpers.js';
+import { esc, fmtDateLong, jointForDate, JOINTS_BY_WEEKDAY, APP_VERSION, isoDateLocal, todayIso, STOP_REASONS, stopReasonLabel } from './helpers.js';
 
 // Merkstijl, overgenomen uit de schets en de demo.
 const COLORS = {
@@ -427,6 +427,25 @@ export function expiredPage({ user }) {
   return layout({ title: 'Verlopen', body });
 }
 
+// Sinds versie 1.12.0: aparte pagina voor het handmatige toegangs-vinkje (los van de
+// betaaldatum, zie isAccessDisabled in auth.js) — een eigen tekst, zodat een deelnemer niet
+// per ongeluk denkt dat het om een verlopen abonnement gaat terwijl de beheerder de toegang
+// juist bewust heeft uitgezet.
+export function accessDisabledPage({ user }) {
+  const body = `
+  <div style="min-height:100vh;display:flex;flex-direction:column;background:${COLORS.cream};padding-bottom:64px;">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:20px 22px 0;">
+      <div style="display:flex;align-items:center;gap:8px;">${logoMark(30)}<div style="font-weight:800;font-size:16px;color:${COLORS.teal900};">DailyFit</div></div>
+      <form method="post" action="/logout"><button type="submit" style="background:none;border:none;font-family:inherit;font-size:13px;font-weight:700;color:${COLORS.inkSoft};">Uitloggen</button></form>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;max-width:420px;margin:0 auto;width:100%;">
+      <div style="font-size:24px;font-weight:900;margin-top:16px;">Je account is niet actief</div>
+      <div style="font-size:16px;font-weight:600;color:${COLORS.inkSoft};margin-top:8px;">Neem contact op met de beheerder als je denkt dat dit niet klopt.</div>
+    </div>
+  </div>${demoFooter()}`;
+  return layout({ title: 'Niet actief', body });
+}
+
 // --- Beheerder ---
 
 function adminShell(active, body) {
@@ -618,22 +637,61 @@ function trainingStatsLine(u) {
   return `<div style="font-size:12px;font-weight:700;color:${COLORS.teal900};margin-top:4px;">${completed}x getraind &middot; ${percent}% (van ${possible} ${dagenWoord} sinds aanmelden)</div>`;
 }
 
+// Zichtbare status-badges voor de twee nieuwe beheervelden (sinds versie 1.12.0) — alleen
+// getoond als er iets afwijkends is (toegang uitgezet, en/of een ingevulde reden van
+// stoppen), zodat de rijen van de meeste (nog gewoon actieve) deelnemers niet onnodig vol
+// staan met badges.
+function accessAndStopBadges(u) {
+  if (u.role === 'admin') return '';
+  const parts = [];
+  if (u.access_enabled === false) {
+    parts.push(`<span style="background:#FBEDD3;color:${COLORS.amber600};padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800;">Toegang uitgezet</span>`);
+  }
+  if (u.stop_reason) {
+    parts.push(`<span style="background:${COLORS.border};color:${COLORS.inkSoft};padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800;">${esc(stopReasonLabel(u.stop_reason))}</span>`);
+  }
+  if (!parts.length) return '';
+  return `<div style="margin-top:4px;display:flex;gap:6px;flex-wrap:wrap;">${parts.join('')}</div>`;
+}
+
+// Klein rond fotootje naast een deelnemer in het beheerdersoverzicht (sinds versie 1.12.0) —
+// zodat de beheerder iemand bijv. aan de telefoon kan herkennen. Zolang er nog geen foto is
+// geüpload, staat er een simpel "initiaal"-plaatje in dezelfde ronde vorm, zodat de rijen met
+// en zonder foto niet raar door elkaar springen. Alleen voor senioren (deelnemers) — een
+// beheerder-account heeft hier geen foto voor nodig.
+function avatarHtml(u) {
+  if (u.role === 'admin') return '';
+  const size = 40;
+  if (u.photo_updated_at) {
+    return `<img src="/admin/gebruikers/${esc(u.username)}/photo" alt="" style="width:${size}px;height:${size}px;border-radius:50%;object-fit:cover;flex-shrink:0;background:${COLORS.teal100};" />`;
+  }
+  const initial = (u.display_name || '?').trim().charAt(0).toUpperCase() || '?';
+  return `<div style="width:${size}px;height:${size}px;border-radius:50%;background:${COLORS.teal100};color:${COLORS.teal900};display:flex;align-items:center;justify-content:center;font-weight:800;font-size:15px;flex-shrink:0;">${esc(initial)}</div>`;
+}
+
 export function usersPage({ users, error }) {
   const rows = users.map((u) => `
     <div style="padding:14px 16px;border:1px solid ${COLORS.border};border-radius:14px;background:${COLORS.white};margin-bottom:10px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;">
-        <div>
-          <div style="font-size:15px;font-weight:800;">${esc(u.display_name)}</div>
-          <div style="font-size:12px;font-weight:600;color:${COLORS.inkSoft};">@${esc(u.username)}${u.role !== 'admin' && u.phone_display ? ' &middot; ' + esc(u.phone_display) : ''}</div>
-          ${paidStatusBadge(u)}
-          ${trainingStatsLine(u)}
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          ${avatarHtml(u)}
+          <div>
+            <div style="font-size:15px;font-weight:800;">${esc(u.display_name)}</div>
+            <div style="font-size:12px;font-weight:600;color:${COLORS.inkSoft};">@${esc(u.username)}${u.role !== 'admin' && u.phone_display ? ' &middot; ' + esc(u.phone_display) : ''}</div>
+            ${paidStatusBadge(u)}
+            ${accessAndStopBadges(u)}
+            ${trainingStatsLine(u)}
+          </div>
         </div>
-        <div style="background:${u.role === 'admin' ? COLORS.teal100 : '#FBEDD3'};color:${u.role === 'admin' ? COLORS.teal900 : COLORS.amber600};padding:4px 10px;border-radius:999px;font-size:11px;font-weight:800;">${u.role === 'admin' ? 'Beheerder' : 'Senior'}</div>
+        <div style="background:${u.role === 'admin' ? COLORS.teal100 : '#FBEDD3'};color:${u.role === 'admin' ? COLORS.teal900 : COLORS.amber600};padding:4px 10px;border-radius:999px;font-size:11px;font-weight:800;white-space:nowrap;">${u.role === 'admin' ? 'Beheerder' : 'Senior'}</div>
       </div>
-      <form method="post" action="/admin/gebruikers/${esc(u.username)}" style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:end;">
+      <form method="post" action="/admin/gebruikers/${esc(u.username)}" enctype="multipart/form-data" style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;align-items:end;">
         <label style="display:flex;flex-direction:column;gap:2px;font-size:11px;font-weight:700;color:${COLORS.inkSoft};">Naam<input name="displayName" value="${esc(u.display_name)}" style="height:34px;border-radius:8px;border:1px solid ${COLORS.border};padding:0 8px;font-size:12px;font-family:inherit;" /></label>
         ${u.role !== 'admin' ? `<label style="display:flex;flex-direction:column;gap:2px;font-size:11px;font-weight:700;color:${COLORS.inkSoft};">Mobiel nummer<input name="phone" value="${esc(u.phone_display || '')}" style="height:34px;border-radius:8px;border:1px solid ${COLORS.border};padding:0 8px;font-size:12px;font-family:inherit;" /></label>
-        <label style="display:flex;flex-direction:column;gap:2px;font-size:11px;font-weight:700;color:${COLORS.inkSoft};">Betaald tot<input name="paidUntil" type="date" value="${u.paid_until ? new Date(u.paid_until).toISOString().slice(0, 10) : ''}" style="height:34px;border-radius:8px;border:1px solid ${COLORS.border};padding:0 8px;font-size:12px;font-family:inherit;" /></label>` : ''}
+        <label style="display:flex;flex-direction:column;gap:2px;font-size:11px;font-weight:700;color:${COLORS.inkSoft};">Betaald tot<input name="paidUntil" type="date" value="${u.paid_until ? new Date(u.paid_until).toISOString().slice(0, 10) : ''}" style="height:34px;border-radius:8px;border:1px solid ${COLORS.border};padding:0 8px;font-size:12px;font-family:inherit;" /></label>
+        <label style="display:flex;flex-direction:column;gap:2px;font-size:11px;font-weight:700;color:${COLORS.inkSoft};">Foto<input type="file" name="photo" accept="image/png,image/jpeg,image/webp" style="font-size:11px;max-width:150px;" /></label>
+        <label style="display:flex;flex-direction:column;gap:2px;font-size:11px;font-weight:700;color:${COLORS.inkSoft};">Reden van stoppen<select name="stopReason" style="height:34px;border-radius:8px;border:1px solid ${COLORS.border};padding:0 6px;font-size:12px;font-family:inherit;">${STOP_REASONS.map((r) => `<option value="${esc(r.value)}"${(u.stop_reason || '') === r.value ? ' selected' : ''}>${esc(r.label)}</option>`).join('')}</select></label>
+        <label style="display:flex;align-items:center;gap:6px;font-size:11px;font-weight:700;color:${COLORS.inkSoft};height:34px;"><input type="checkbox" name="accessEnabled" ${u.access_enabled === false ? '' : 'checked'} style="width:16px;height:16px;" />Mag de website gebruiken</label>` : ''}
         <button type="submit" style="height:34px;padding:0 14px;border:none;border-radius:8px;background:${COLORS.coral600};color:${COLORS.white};font-family:inherit;font-size:12px;font-weight:800;">Opslaan</button>
       </form>
     </div>`).join('');
@@ -649,11 +707,11 @@ export function usersPage({ users, error }) {
         Exporteren naar Excel
       </a>
     </div>
+    ${error ? `<div style="background:#FBEDD3;color:${COLORS.amber600};padding:10px 14px;border-radius:12px;font-size:14px;font-weight:700;margin-bottom:16px;">${esc(error)}</div>` : ''}
     <div style="display:grid;grid-template-columns:1.2fr 1fr;gap:24px;align-items:start;">
       <div>${rows}</div>
       <form method="post" action="/admin/gebruikers" style="background:${COLORS.white};border:1px solid ${COLORS.border};border-radius:18px;padding:20px;display:flex;flex-direction:column;gap:12px;">
         <div style="font-size:16px;font-weight:800;">Nieuw account aanmaken</div>
-        ${error ? `<div style="background:#FBEDD3;color:${COLORS.amber600};padding:8px 12px;border-radius:10px;font-size:13px;font-weight:700;">${esc(error)}</div>` : ''}
         <input name="displayName" placeholder="Naam (bv. Corrie)" style="height:44px;border-radius:12px;border:1px solid ${COLORS.border};padding:0 12px;font-size:14px;font-family:inherit;" />
         <input name="username" placeholder="Gebruikersnaam" style="height:44px;border-radius:12px;border:1px solid ${COLORS.border};padding:0 12px;font-size:14px;font-family:inherit;" />
         <select name="role" style="height:44px;border-radius:12px;border:1px solid ${COLORS.border};padding:0 12px;font-size:14px;font-family:inherit;"><option value="senior">Senior</option><option value="admin">Beheerder</option></select>

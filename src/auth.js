@@ -94,3 +94,11 @@ export function isExpired(user) {
   // server zelf — zie de toelichting bij APP_TIMEZONE in helpers.js.
   return isoDateLocal(user.paid_until) < todayIso();
 }
+
+// Losstaand van de betaaldatum (isExpired hierboven): een handmatige aan/uit-schakelaar per
+// deelnemer, sinds versie 1.12.0, waarmee de beheerder iemands toegang kan intrekken zonder
+// de betaaldatum aan te passen (bijv. iemand die gestopt is, maar nog wel betaald heeft tot
+// een latere datum). Staat los van "stop_reason" (dat is puur informatief, zie schema.sql).
+export function isAccessDisabled(user) {
+  return user.role !== 'admin' && user.access_enabled === false;
+}

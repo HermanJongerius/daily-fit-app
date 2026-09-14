@@ -1,13 +1,14 @@
 import express from 'express';
 import cookieParser from 'cookie-parser';
+import multer from 'multer';
 import ExcelJS from 'exceljs';
 import { pool } from './db.js';
 import {
   normalizePhone, hashPassword, verifyPassword, isLocked, registerFailedAttempt,
   clearFailedAttempts, createSession, destroySession, userForSessionToken,
-  sessionCookieOptions, SESSION_COOKIE, isExpired,
+  sessionCookieOptions, SESSION_COOKIE, isExpired, isAccessDisabled,
 } from './auth.js';
-import { jointForDate, isoDateLocal, todayIso, weekdayInAppTz, JOINTS_BY_WEEKDAY, DAY_LETTERS_BY_WEEKDAY, cycleInfoForUser, daysPossibleSince } from './helpers.js';
+import { jointForDate, isoDateLocal, todayIso, weekdayInAppTz, JOINTS_BY_WEEKDAY, DAY_LETTERS_BY_WEEKDAY, cycleInfoForUser, daysPossibleSince, stopReasonLabel } from './helpers.js';
 import { createDirectUploadUrl, getVideoStatus, createSignedPlaybackToken } from './cloudflareStream.js';
 import * as views from './views.js';
 
@@ -17,6 +18,32 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
 const cfConfigured = !!(process.env.CLOUDFLARE_ACCOUNT_ID && process.env.CLOUDFLARE_API_TOKEN);
+
+// --- pasfoto per deelnemer (sinds versie 1.12.0) — rechtstreeks in de database bewaard, zie
+// schema.sql. Kleine bestandsgrootte-limiet en alleen gangbare afbeeldingsformaten, ruim
+// genoeg voor een simpele pasfoto maar niet zo groot dat het de database onnodig belast.
+const photoUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.mimetype)) {
+      return cb(new Error('ONLY_IMAGES'));
+    }
+    cb(null, true);
+  },
+});
+// Zet een multer-fout om in een Nederlandse foutmelding (te groot / verkeerd bestandstype) in
+// plaats van de request te laten crashen — de route hieronder toont 'm dan netjes op het scherm.
+function uploadPhotoMiddleware(req, res, next) {
+  photoUpload.single('photo')(req, res, (err) => {
+    if (err) {
+      req.photoError = err.code === 'LIMIT_FILE_SIZE'
+        ? 'De foto is te groot (max. 5 MB).'
+        : 'Alleen JPEG, PNG of WEBP-afbeeldingen zijn toegestaan als foto.';
+    }
+    next();
+  });
+}
 
 // --- gebruiker uit sessie-cookie halen ---
 app.use(async (req, res, next) => {
@@ -89,6 +116,10 @@ app.post('/logout', async (req, res) => {
 
 // --- senior: dagelijkse flow ---
 app.get('/vandaag', requireRole('senior'), async (req, res) => {
+  // Handmatige toegangsschakelaar (zie 4h/4i in technisch-ontwerp.md) gaat vóór de
+  // betaaldatum-controle: een beheerder die iemands toegang expliciet heeft uitgezet, moet
+  // dat effect direct zien, ook als het abonnement zelf nog actief is.
+  if (isAccessDisabled(req.user)) return res.send(views.accessDisabledPage({ user: req.user }));
   if (isExpired(req.user)) return res.send(views.expiredPage({ user: req.user }));
 
   const today = todayIso();
@@ -152,6 +183,7 @@ async function nextUnfinishedSlot(userId, dateIso) {
 }
 
 app.get('/video', requireRole('senior'), async (req, res) => {
+  if (isAccessDisabled(req.user)) return res.redirect('/vandaag');
   if (isExpired(req.user)) return res.redirect('/vandaag');
   const today = todayIso();
 
@@ -423,7 +455,17 @@ app.post('/admin/videos/attach', requireRole('admin'), async (req, res) => {
 // dag van aanmelden tot en met vandaag). Beheerders trainen niet, dus die krijgen geen
 // trainingsstatistiek.
 async function loadUsersWithStats() {
-  const { rows } = await pool.query('SELECT * FROM users ORDER BY role DESC, display_name');
+  // Let op: "photo" (de pasfoto zelf, als bytes) wordt hier bewust niet opgehaald — dat zou
+  // bij elke keer dat dit scherm geopend wordt de foto's van alle deelnemers in één keer
+  // meesturen, terwijl de pagina alleen per deelnemer een klein rond fotootje toont (via een
+  // eigen route, zie /admin/gebruikers/:username/photo). "photo_mime"/"photo_updated_at" wel,
+  // want die bepalen alleen of er al een foto is, niet de foto zelf.
+  const { rows } = await pool.query(
+    `SELECT id, username, role, display_name, phone, phone_display, paid_until,
+            failed_attempts, locked_until, created_at, photo_mime, photo_updated_at,
+            stop_reason, access_enabled
+     FROM users ORDER BY role DESC, display_name`
+  );
   const { rows: completionCounts } = await pool.query(
     'SELECT user_id, COUNT(*)::int AS n FROM completions GROUP BY user_id'
   );
@@ -460,6 +502,8 @@ app.get('/admin/gebruikers/export', requireRole('admin'), async (req, res) => {
     { header: 'Mobiel nummer', key: 'telefoon', width: 18 },
     { header: 'Betaald tot', key: 'betaaldTot', width: 14, style: { numFmt: 'dd-mm-yyyy' } },
     { header: 'Status', key: 'status', width: 16 },
+    { header: 'Toegang', key: 'toegang', width: 14 },
+    { header: 'Reden van stoppen', key: 'redenStoppen', width: 22 },
     { header: 'Aangemeld op', key: 'aangemeld', width: 14, style: { numFmt: 'dd-mm-yyyy' } },
     { header: 'Aantal keer getraind', key: 'aantalGetraind', width: 20 },
     { header: 'Mogelijke traindagen', key: 'mogelijkeDagen', width: 20 },
@@ -480,6 +524,10 @@ app.get('/admin/gebruikers/export', requireRole('admin'), async (req, res) => {
       telefoon: u.phone_display || '',
       betaaldTot: u.paid_until ? new Date(u.paid_until) : null,
       status,
+      // "Toegang" (het handmatige vinkje) staat los van "Status" hierboven (dat gaat over de
+      // betaaldatum) — zie isAccessDisabled in auth.js.
+      toegang: u.access_enabled === false ? 'Uitgezet' : 'Actief',
+      redenStoppen: stopReasonLabel(u.stop_reason),
       aangemeld: new Date(u.created_at),
       aantalGetraind: u.trainingStats ? u.trainingStats.completed : 0,
       mogelijkeDagen: u.trainingStats ? u.trainingStats.possible : 0,
@@ -534,7 +582,7 @@ app.post('/admin/gebruikers', requireRole('admin'), async (req, res) => {
   }
 });
 
-app.post('/admin/gebruikers/:username', requireRole('admin'), async (req, res) => {
+app.post('/admin/gebruikers/:username', requireRole('admin'), uploadPhotoMiddleware, async (req, res) => {
   const { username } = req.params;
   const displayName = String(req.body.displayName || '').trim();
   const phoneRaw = req.body.phone != null ? String(req.body.phone).trim() : undefined;
@@ -544,6 +592,11 @@ app.post('/admin/gebruikers/:username', requireRole('admin'), async (req, res) =
   const target = rows[0];
   if (!target) return res.redirect('/admin/gebruikers');
 
+  if (req.photoError) {
+    const users = await loadUsersWithStats();
+    return res.status(400).send(views.usersPage({ users, error: req.photoError }));
+  }
+
   const fields = ['display_name = $2'];
   const params = [username, displayName || target.display_name];
   if (target.role !== 'admin') {
@@ -552,9 +605,33 @@ app.post('/admin/gebruikers/:username', requireRole('admin'), async (req, res) =
       fields.push(`phone_display = $${params.length + 1}`); params.push(phoneRaw);
     }
     fields.push(`paid_until = $${params.length + 1}`); params.push(paidUntil || null);
+    // "Reden van stoppen" (puur informatief) en het toegangs-vinkje zijn bewust twee losse
+    // velden — zie schema.sql. Een leeg checkbox-veldje wordt door de browser helemaal niet
+    // meegestuurd (vandaar de expliciete `=== 'on'`-check), dus die moet altijd bijgewerkt
+    // worden — anders zou uitvinken van het vinkje nooit aankomen bij de server.
+    fields.push(`stop_reason = $${params.length + 1}`); params.push(req.body.stopReason || null);
+    fields.push(`access_enabled = $${params.length + 1}`); params.push(req.body.accessEnabled === 'on');
+    // Alleen als er daadwerkelijk een nieuw bestand is gekozen — een leeg gelaten
+    // fotoveldje mag de al opgeslagen foto niet per ongeluk wissen.
+    if (req.file) {
+      fields.push(`photo = $${params.length + 1}`); params.push(req.file.buffer);
+      fields.push(`photo_mime = $${params.length + 1}`); params.push(req.file.mimetype);
+      fields.push('photo_updated_at = now()');
+    }
   }
   await pool.query(`UPDATE users SET ${fields.join(', ')} WHERE username = $1`, params);
   res.redirect('/admin/gebruikers');
+});
+
+// --- pasfoto van een deelnemer opvragen — alleen voor de beheerder, niet voor de deelnemer
+// zelf of anderen (zie de gekozen scope: alleen zichtbaar in het beheerdersoverzicht). ---
+app.get('/admin/gebruikers/:username/photo', requireRole('admin'), async (req, res) => {
+  const { rows } = await pool.query('SELECT photo, photo_mime FROM users WHERE username = $1', [req.params.username]);
+  const row = rows[0];
+  if (!row || !row.photo) return res.status(404).end();
+  res.setHeader('Content-Type', row.photo_mime || 'application/octet-stream');
+  res.setHeader('Cache-Control', 'private, max-age=300');
+  res.end(row.photo);
 });
 
 // --- vangnet: elke onverwachte fout krijgt een nette Nederlandse pagina i.p.v. een kale

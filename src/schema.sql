@@ -17,6 +17,28 @@ CREATE TABLE IF NOT EXISTS users (
   CONSTRAINT admin_has_password CHECK (role <> 'admin' OR password_hash IS NOT NULL)
 );
 
+-- Pasfoto per deelnemer, voor de beheerder om iemand te herkennen (bijv. aan de telefoon) —
+-- sinds versie 1.12.0. Rechtstreeks als bytes in de database bewaard, net als de rest van de
+-- gegevens hier, in plaats van op de schijf van de server of bij een aparte clouddienst: de
+-- schijf van de server is op Railway niet blijvend (verdwijnt bij elke herstart/nieuwe versie),
+-- en voor kleine pasfoto's van een paar tientallen deelnemers is een aparte opslagdienst niet
+-- nodig. "ADD COLUMN IF NOT EXISTS" is veilig om herhaald te draaien, ook op een database die
+-- deze kolommen al heeft.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS photo BYTEA;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_mime TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_updated_at TIMESTAMPTZ;
+
+-- Twee losse beheervelden per deelnemer, sinds versie 1.12.0 (los van elkaar instelbaar,
+-- geen automatische koppeling):
+-- - "stop_reason": puur informatief (een pulldown-keuze), heeft zelf geen effect op de app —
+--   alleen zichtbaar/instelbaar in het beheerdersoverzicht, voor Hermans eigen administratie.
+-- - "access_enabled": bepaalt écht of iemand de website mag gebruiken, los van de betaaldatum
+--   (paid_until) — een senior met access_enabled = false komt niet meer bij de dagelijkse
+--   oefening, ook niet als het abonnement verder gewoon actief is. Standaard "true" (aan), dus
+--   bestaande deelnemers houden gewoon toegang na deze migratie.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS stop_reason TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS access_enabled BOOLEAN NOT NULL DEFAULT true;
+
 -- Per dag staan er (sinds versie 1.11.0) 4 losse video's gepland i.p.v. 1 — een gewricht
 -- moet vanuit meerdere kanten bewogen worden, en dat vraagt om 4 losse oefeningen/video's
 -- (bijv. "Nek — rotatie links/rechts", "Nek — voor/achter buigen", ...). "slot" is het

@@ -151,7 +151,7 @@ assert(text.includes('0611122233'), 'telefoonnummer van de nieuwe gebruiker word
   const sheet = workbook.getWorksheet('Deelnemers');
   const headerRow = sheet.getRow(1).values.slice(1);
   assert(
-    headerRow.join('|') === ['Naam', 'Mobiel nummer', 'Betaald tot', 'Status', 'Aangemeld op', 'Aantal keer getraind', 'Mogelijke traindagen', 'Percentage getraind'].join('|'),
+    headerRow.join('|') === ['Naam', 'Mobiel nummer', 'Betaald tot', 'Status', 'Toegang', 'Reden van stoppen', 'Aangemeld op', 'Aantal keer getraind', 'Mogelijke traindagen', 'Percentage getraind'].join('|'),
     'de Excel-export heeft de verwachte kolomkoppen'
   );
   const rows = [];
@@ -159,6 +159,7 @@ assert(text.includes('0611122233'), 'telefoonnummer van de nieuwe gebruiker word
   const testRow = rows.find((r) => r[0] === 'Test Persoon');
   assert(!!testRow, 'de nieuw aangemaakte senior staat ook in de Excel-export');
   assert(testRow[1] === '0611122233', 'het telefoonnummer in de export klopt');
+  assert(testRow[4] === 'Actief' && testRow[5] === 'Nog actief', 'een nieuwe deelnemer staat in de export met toegang "Actief" en reden "Nog actief"');
   assert(!rows.some((r) => r[0] === 'Beheerder'), 'het beheerder-account zelf staat niet tussen de deelnemers in de export');
 }
 
@@ -170,6 +171,98 @@ await page.click('form[action="/admin/gebruikers"] button[type="submit"]');
 await page.waitForLoadState('networkidle');
 text = await page.textContent('body');
 assert(text.includes('bestaat al'), 'dubbele gebruikersnaam geeft een foutmelding');
+
+// --- pasfoto uploaden voor een deelnemer (nieuw, versie 1.12.0): alleen zichtbaar in het
+// beheerdersoverzicht, geen foto-veld bij het aanmaken van een nieuw account (dat kan alleen
+// achteraf via dit bewerkformulier) ---
+// Let op: alle klikken op de "Opslaan"-knop hieronder gebruiken bewust page.click() met een
+// scoped selector (dus geen ruwe el.click() via $eval) — dat laat Playwright de navigatie na
+// de POST correct volgen, wat betrouwbaarder samenwerkt met de daaropvolgende waitForLoadState.
+{
+  const testpFormSel = 'form[action="/admin/gebruikers/testp"]';
+  // Zorgt dat deze test ook bij een herhaalde run (testp bestaat dan al van een vorige keer)
+  // start vanuit dezelfde schone toestand: nog geen foto.
+  await pool.query("UPDATE users SET photo = NULL, photo_mime = NULL, photo_updated_at = NULL WHERE username = 'testp'");
+  await page.reload();
+  await page.waitForLoadState('networkidle');
+
+  assert((await page.locator(`${testpFormSel} >> xpath=.. >> img`).count()) === 0, 'zolang er nog geen foto is geüpload, staat er geen <img>-tag (alleen het initiaal-plaatje)');
+
+  // --- verkeerd bestandstype wordt geweigerd, met een duidelijke melding ---
+  await page.locator(`${testpFormSel} input[type="file"]`).setInputFiles({
+    name: 'niet-een-foto.txt', mimeType: 'text/plain', buffer: Buffer.from('dit is geen foto'),
+  });
+  await page.click(`${testpFormSel} button[type="submit"]`);
+  await page.waitForLoadState('networkidle');
+  text = await page.textContent('body');
+  assert(text.includes('Alleen JPEG, PNG of WEBP'), 'een verkeerd bestandstype als foto wordt geweigerd met een duidelijke melding');
+  assert((await page.locator(`${testpFormSel} >> xpath=.. >> img`).count()) === 0, 'na een geweigerde upload staat er nog steeds geen foto');
+
+  // --- een geldige (heel kleine) afbeelding wordt wél geaccepteerd ---
+  const tinyPng = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=',
+    'base64'
+  );
+  await page.locator(`${testpFormSel} input[type="file"]`).setInputFiles({ name: 'testfoto.png', mimeType: 'image/png', buffer: tinyPng });
+  await page.click(`${testpFormSel} button[type="submit"]`);
+  await page.waitForLoadState('networkidle');
+  text = await page.textContent('body');
+  assert(!text.includes('Alleen JPEG, PNG of WEBP'), 'een geldige afbeelding wordt zonder foutmelding geaccepteerd');
+  const photoSrc = await page.locator(`${testpFormSel} >> xpath=.. >> img`).getAttribute('src');
+  assert(photoSrc === '/admin/gebruikers/testp/photo', 'na een geslaagde upload staat de foto als <img>-tag op de kaart van de deelnemer, wijzend naar de eigen foto-route');
+
+  // --- de foto zelf is ook echt op te vragen (als beheerder) ---
+  const photoResp = await page.request.get(BASE + photoSrc);
+  assert(photoResp.ok(), 'de geüploade foto is als afbeelding op te vragen');
+  assert((photoResp.headers()['content-type'] || '').startsWith('image/'), 'de foto komt terug met een afbeeldings-content-type');
+}
+
+// --- reden van stoppen (pulldown) en toegangs-vinkje: twee losse velden per deelnemer (nieuw,
+// versie 1.12.0). De pulldown is puur informatief; het vinkje bepaalt écht of iemand nog bij
+// de dagelijkse oefening kan komen (los van de betaaldatum). ---
+{
+  const testpFormSel = 'form[action="/admin/gebruikers/testp"]';
+  await page.selectOption(`${testpFormSel} select[name="stopReason"]`, 'gezondheid');
+  await page.setChecked(`${testpFormSel} input[name="accessEnabled"]`, false);
+  await page.click(`${testpFormSel} button[type="submit"]`);
+  await page.waitForLoadState('networkidle');
+  text = await page.textContent('body');
+  assert(text.includes('Gezondheidsredenen'), 'de gekozen reden van stoppen verschijnt als badge op de kaart van de deelnemer');
+  assert(text.includes('Toegang uitgezet'), 'het uitzetten van het toegangs-vinkje verschijnt als badge op de kaart van de deelnemer');
+
+  // --- een deelnemer met uitgezette toegang komt niet meer bij de dagelijkse oefening,
+  // ook al is het abonnement verder gewoon actief (dit is dus geen kopie van de al bestaande
+  // "verlopen"-controle, maar een eigen, los in te stellen schakelaar) ---
+  await page.click('button:has-text("Uitloggen")');
+  await page.waitForLoadState('networkidle');
+  await page.fill('input[name="username"]', 'testp');
+  await page.fill('input[name="credential"]', '0611122233');
+  await page.click('button[type="submit"]');
+  await page.waitForLoadState('networkidle');
+  text = await page.textContent('body');
+  assert(text.includes('Je account is niet actief'), 'een deelnemer met uitgezette toegang ziet een duidelijk "niet actief"-scherm i.p.v. de dagelijkse flow');
+  await page.goto(BASE + '/video');
+  text = await page.textContent('body');
+  assert(text.includes('Je account is niet actief'), 'ook rechtstreeks naar /video komt een deelnemer met uitgezette toegang niet bij de oefening');
+
+  // --- weer inloggen als beheerder, en testp's toegang weer aanzetten zodat een volgende
+  // testrun (en de brute-force-test hierna, die ook met testp inlogt) niet blijft hangen
+  // op een bewust uitgezette toegang ---
+  await page.click('button:has-text("Uitloggen")');
+  await page.waitForLoadState('networkidle');
+  await page.fill('input[name="username"]', 'beheerder');
+  await page.fill('input[name="credential"]', 'test-admin-123');
+  await page.click('button[type="submit"]');
+  await page.waitForLoadState('networkidle');
+  await page.click('a[href="/admin/gebruikers"]');
+  await page.waitForLoadState('networkidle');
+  await page.selectOption(`${testpFormSel} select[name="stopReason"]`, '');
+  await page.setChecked(`${testpFormSel} input[name="accessEnabled"]`, true);
+  await page.click(`${testpFormSel} button[type="submit"]`);
+  await page.waitForLoadState('networkidle');
+  text = await page.textContent('body');
+  assert(!text.includes('Toegang uitgezet'), 'toegang weer aanzetten verwijdert de badge weer');
+}
 
 // --- betaaldatum van corrie in het verleden zetten via het bewerkformulier ---
 const corrieForm = await page.$('form[action="/admin/gebruikers/corrie"]');
