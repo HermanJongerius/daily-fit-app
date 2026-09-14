@@ -21,6 +21,11 @@ const APP_TIMEZONE = 'Europe/Amsterdam';
 const __dirname = dirname(fileURLToPath(import.meta.url));
 export const APP_VERSION = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf8')).version;
 
+// Telefoonnummer van Herman, getoond op het "niet actief"-scherm (zie 4k) zodat een
+// deelnemer wiens toegang is uitgezet direct iemand kan bereiken, sinds versie 1.14.0.
+export const SUPPORT_PHONE_DISPLAY = '06-28440641';
+export const SUPPORT_PHONE_TEL = '0628440641';
+
 // Eerste letter van elke dag, voor de week-voortgangsbolletjes (ma=M, di=D, wo=W, do=D, vr=V, za=Z, zo=Z).
 export const DAY_LETTERS_BY_WEEKDAY = ['Z', 'M', 'D', 'W', 'D', 'V', 'Z']; // 0=zo..6=za (JS getDay())
 

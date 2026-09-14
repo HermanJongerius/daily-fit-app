@@ -245,6 +245,12 @@ assert(text.includes('bestaat al'), 'dubbele gebruikersnaam geeft een foutmeldin
   await page.waitForLoadState('networkidle');
   text = await page.textContent('body');
   assert(text.includes('Je account is niet actief'), 'een deelnemer met uitgezette toegang ziet een duidelijk "niet actief"-scherm i.p.v. de dagelijkse flow');
+  assert(text.includes('06-28440641'), 'op het "niet actief"-scherm staat sinds versie 1.14.0 ook een telefoonnummer');
+  assert(text.includes('Bij geen direct gehoor, wordt binnen 24 uur contact met u opgenomen.'), 'op het "niet actief"-scherm staat sinds versie 1.14.0 ook de 24-uurs-tekst');
+  assert(
+    (await page.locator('a[href="tel:0628440641"]').count()) > 0,
+    'het telefoonnummer op het "niet actief"-scherm is een klikbare tel:-link'
+  );
   await page.goto(BASE + '/video');
   text = await page.textContent('body');
   assert(text.includes('Je account is niet actief'), 'ook rechtstreeks naar /video komt een deelnemer met uitgezette toegang niet bij de oefening');

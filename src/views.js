@@ -1,4 +1,4 @@
-import { esc, fmtDateLong, jointForDate, JOINTS_BY_WEEKDAY, APP_VERSION, isoDateLocal, todayIso, STOP_REASONS, stopReasonLabel, GROUPS } from './helpers.js';
+import { esc, fmtDateLong, jointForDate, JOINTS_BY_WEEKDAY, APP_VERSION, isoDateLocal, todayIso, STOP_REASONS, stopReasonLabel, GROUPS, SUPPORT_PHONE_DISPLAY, SUPPORT_PHONE_TEL } from './helpers.js';
 
 // Merkstijl, overgenomen uit de schets en de demo.
 const COLORS = {
@@ -441,6 +441,8 @@ export function accessDisabledPage({ user }) {
     <div style="flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:24px;max-width:420px;margin:0 auto;width:100%;">
       <div style="font-size:24px;font-weight:900;margin-top:16px;">Je account is niet actief</div>
       <div style="font-size:16px;font-weight:600;color:${COLORS.inkSoft};margin-top:8px;">Neem contact op met de beheerder als je denkt dat dit niet klopt.</div>
+      <a href="tel:${SUPPORT_PHONE_TEL}" style="display:block;font-size:22px;font-weight:800;color:${COLORS.teal900};margin-top:20px;text-decoration:none;">${esc(SUPPORT_PHONE_DISPLAY)}</a>
+      <div style="font-size:14px;font-weight:600;color:${COLORS.inkSoft};margin-top:6px;">Bij geen direct gehoor, wordt binnen 24 uur contact met u opgenomen.</div>
     </div>
   </div>${demoFooter()}`;
   return layout({ title: 'Niet actief', body });
