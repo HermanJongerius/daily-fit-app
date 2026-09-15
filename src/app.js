@@ -164,7 +164,12 @@ app.get('/vandaag', requireRole('senior'), async (req, res) => {
     dots.push(`<span title="${iso}" style="display:inline-flex;align-items:center;justify-content:center;width:22px;height:22px;border-radius:50%;margin:0 3px;font-size:11px;font-weight:800;background:${isDone ? '#3A6B60' : '#E7DFCF'};color:${isDone ? '#FBF6EC' : '#746C5F'};">${letter}</span>`);
   }
 
-  res.send(views.vandaagPage({ user: req.user, schedule, done, videosDoneToday, weekDots: dots.join('') }));
+  // Nieuwsbericht van vandaag (sinds versie 1.15.0, zie news_items in schema.sql) — alleen
+  // getoond als de beheerder er daadwerkelijk één voor deze datum heeft klaargezet.
+  const { rows: newsRows } = await pool.query('SELECT message FROM news_items WHERE date = $1', [today]);
+  const newsMessage = newsRows.length ? newsRows[0].message : null;
+
+  res.send(views.vandaagPage({ user: req.user, schedule, done, videosDoneToday, weekDots: dots.join(''), newsMessage }));
 });
 
 // Bepaalt server-side (dus niet te beïnvloeden vanaf de client) welk van de 4 video's van
@@ -447,6 +452,34 @@ app.post('/admin/videos/attach', requireRole('admin'), async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// --- beheerder: nieuwsberichten (sinds versie 1.15.0) — één bericht per datum, getoond op
+// /vandaag zodra die datum is aangebroken. Los van de dagelijkse videoplanning en van de
+// beloningsvideo's: puur tekst, geen Cloudflare-koppeling nodig. ---
+app.get('/admin/news', requireRole('admin'), async (req, res) => {
+  const { rows } = await pool.query('SELECT * FROM news_items ORDER BY date DESC');
+  res.send(views.newsPage({ newsItems: rows, error: req.query.error || null }));
+});
+
+app.post('/admin/news', requireRole('admin'), async (req, res) => {
+  const { date, message } = req.body;
+  if (!date || !message || !message.trim()) {
+    return res.redirect('/admin/news?error=' + encodeURIComponent('Vul zowel een datum als een bericht in.'));
+  }
+  // Eén bericht per datum: een tweede toevoeging op dezelfde datum overschrijft het
+  // eerdere bericht (net als bij het opnieuw uploaden van een video voor dezelfde dag).
+  await pool.query(
+    `INSERT INTO news_items (date, message) VALUES ($1, $2)
+     ON CONFLICT (date) DO UPDATE SET message = $2, updated_at = now()`,
+    [date, message.trim()]
+  );
+  res.redirect('/admin/news');
+});
+
+app.post('/admin/news/:id/delete', requireRole('admin'), async (req, res) => {
+  await pool.query('DELETE FROM news_items WHERE id = $1', [req.params.id]);
+  res.redirect('/admin/news');
 });
 
 // --- beheerder: gebruikers ---

@@ -73,7 +73,7 @@ export function loginPage({ error }) {
   return layout({ title: 'Inloggen', body });
 }
 
-export function vandaagPage({ user, schedule, done, videosDoneToday = 0, weekDots }) {
+export function vandaagPage({ user, schedule, done, videosDoneToday = 0, weekDots, newsMessage = null }) {
   const today = new Date();
   const joint = jointForDate(today);
   const tomorrow = new Date(today.getTime() + 86400000);
@@ -117,6 +117,10 @@ export function vandaagPage({ user, schedule, done, videosDoneToday = 0, weekDot
       <div style="font-size:15px;font-weight:700;color:${COLORS.inkSoft};">Hallo ${esc(user.display_name)}</div>
       ${center}
       <div style="margin-top:32px;">${weekDots}</div>
+      ${newsMessage ? `<div style="margin-top:20px;width:100%;text-align:left;background:${COLORS.teal100};color:${COLORS.teal900};padding:14px 16px;border-radius:14px;">
+        <div style="font-size:14px;font-weight:900;margin-bottom:4px;">Nieuws!</div>
+        <div style="font-size:15px;font-weight:600;line-height:1.5;white-space:pre-line;">${esc(newsMessage)}</div>
+      </div>` : ''}
     </div>
   </div>${demoFooter()}`;
   return layout({ title: 'Vandaag', body });
@@ -454,6 +458,7 @@ function adminShell(active, body) {
   const tabs = [
     ['planning', 'Planning', '/admin/planning'],
     ['videos', "Video's", '/admin/videos'],
+    ['news', 'Nieuws', '/admin/news'],
     ['gebruikers', 'Gebruikers', '/admin/gebruikers'],
   ];
   const nav = tabs.map(([key, label, href]) =>
@@ -617,6 +622,51 @@ export function videosPage({ videos, cfConfigured }) {
       }
     </script>`;
   return layout({ title: "Informatie-video's", body: adminShell('videos', body) });
+}
+
+// Nieuwsberichten (sinds versie 1.15.0): per datum één bericht, dat op /vandaag verschijnt
+// zodra die datum is aangebroken (zie de query in app.js). Zelfde eenvoudige lijst-plus-
+// toevoegformulier-opzet als het scherm "Video's" hierboven, maar met een gewone form-POST
+// (geen upload, dus geen JavaScript nodig) en, in tegenstelling tot de video's, wél een
+// verwijderknop per bericht — een datum kan immers per ongeluk verkeerd zijn ingevuld.
+export function newsPage({ newsItems, error }) {
+  const today = todayIso();
+  const rows = newsItems.map((n) => {
+    const iso = isoDateLocal(n.date);
+    const isToday = iso === today;
+    const isPast = iso < today;
+    return `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:14px 16px;border:1px solid ${COLORS.border};border-radius:14px;background:${COLORS.white};margin-bottom:10px;${isPast ? 'opacity:0.6;' : ''}">
+      <div style="min-width:0;">
+        <div style="font-size:13px;font-weight:700;color:${COLORS.inkSoft};">${fmtDateLong(n.date)}${isToday ? ` <span style="background:${COLORS.teal100};color:${COLORS.teal900};padding:2px 8px;border-radius:999px;font-size:11px;font-weight:800;">Vandaag</span>` : ''}</div>
+        <div style="font-size:15px;font-weight:600;margin-top:4px;white-space:pre-line;overflow-wrap:break-word;">${esc(n.message)}</div>
+      </div>
+      <form method="post" action="/admin/news/${n.id}/delete" style="flex-shrink:0;">
+        <button type="submit" style="background:none;border:none;font-family:inherit;font-size:12px;font-weight:700;color:${COLORS.amber600};cursor:pointer;">Verwijderen</button>
+      </form>
+    </div>`;
+  }).join('');
+
+  const body = `
+    <div style="margin-bottom:20px;">
+      <div style="font-size:24px;font-weight:900;">Nieuws</div>
+      <div style="font-size:14px;font-weight:600;color:${COLORS.inkSoft};margin-top:4px;line-height:1.5;">Een nieuwsbericht verschijnt voor deelnemers op "Vandaag", onder de dagbolletjes — maar alleen op de datum die je hieronder kiest. Kies je een datum waar al een bericht voor klaarstaat, dan vervangt het nieuwe bericht het oude.</div>
+    </div>
+    ${error ? `<div style="background:#FBEDD3;color:${COLORS.amber600};padding:10px 14px;border-radius:12px;font-size:13px;font-weight:700;margin-bottom:16px;">${esc(error)}</div>` : ''}
+    ${newsItems.length ? rows : `<div style="font-size:14px;color:${COLORS.inkSoft};margin-bottom:16px;">Nog geen nieuwsberichten toegevoegd.</div>`}
+    <div style="border:1px dashed ${COLORS.border};border-radius:14px;padding:16px;margin-top:6px;max-width:420px;">
+      <div style="font-size:14px;font-weight:800;margin-bottom:10px;">Nieuw bericht toevoegen</div>
+      <form method="post" action="/admin/news" style="display:flex;flex-direction:column;gap:10px;">
+        <label style="font-size:12px;font-weight:700;color:${COLORS.inkSoft};">Datum
+          <input type="date" name="date" required style="display:block;width:100%;height:44px;border-radius:12px;border:2px solid ${COLORS.border};padding:0 12px;font-size:14px;font-family:inherit;box-sizing:border-box;margin-top:4px;" />
+        </label>
+        <label style="font-size:12px;font-weight:700;color:${COLORS.inkSoft};">Bericht
+          <textarea name="message" required rows="3" style="display:block;width:100%;border-radius:12px;border:2px solid ${COLORS.border};padding:10px 12px;font-size:14px;font-family:inherit;box-sizing:border-box;margin-top:4px;resize:vertical;"></textarea>
+        </label>
+        <button type="submit" style="height:44px;border:none;border-radius:12px;background:${COLORS.coral600};color:${COLORS.white};font-family:inherit;font-size:14px;font-weight:800;">Toevoegen</button>
+      </form>
+    </div>`;
+  return layout({ title: 'Nieuws', body: adminShell('news', body) });
 }
 
 function paidStatusBadge(u) {

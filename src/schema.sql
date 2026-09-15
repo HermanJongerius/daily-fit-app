@@ -123,3 +123,17 @@ CREATE TABLE IF NOT EXISTS reward_videos (
   video_status   TEXT NOT NULL DEFAULT 'processing' CHECK (video_status IN ('processing', 'ready')),
   created_at     TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- Nieuwsberichten voor de deelnemers, sinds versie 1.15.0: de beheerder kan een bericht
+-- schrijven en een datum kiezen waarop het getoond moet worden (beheerscherm "Nieuws",
+-- /admin/news). Op /vandaag verschijnt het bericht van vandaag onder de dagbolletjes — alleen
+-- als er voor vandaag daadwerkelijk een bericht is klaargezet (zie /vandaag in app.js). Eén
+-- bericht per datum (ON CONFLICT (date) DO UPDATE bij het toevoegen overschrijft dus een
+-- eerder bericht op diezelfde datum, i.p.v. een dubbele rij te maken).
+CREATE TABLE IF NOT EXISTS news_items (
+  id             SERIAL PRIMARY KEY,
+  date           DATE NOT NULL UNIQUE,
+  message        TEXT NOT NULL,
+  created_at     TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at     TIMESTAMPTZ NOT NULL DEFAULT now()
+);

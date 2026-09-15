@@ -276,6 +276,88 @@ assert(text.includes('bestaat al'), 'dubbele gebruikersnaam geeft een foutmeldin
   assert(!text.includes('Groep: Roef 09.30'), 'de groep weer op "Geen groep" zetten verwijdert de "Groep: ..."-regel weer');
 }
 
+// --- nieuwsberichten (sinds versie 1.15.0): de beheerder schrijft een bericht + kiest een
+// datum in het nieuwe scherm "Nieuws"; op /vandaag verschijnt het bericht onder de
+// dagbolletjes, maar alleen op de gekozen datum. Getest met testp (die nog nooit een oefening
+// heeft afgerond in deze testreeks, dus geen interferentie met corrie's dagstatus). ---
+{
+  const today = todayIso();
+  const tomorrow = isoDateLocal(new Date(Date.now() + 86400000));
+
+  // Opruimen van een eventuele vorige testrun (idempotentie) voordat we opnieuw beginnen.
+  await pool.query('DELETE FROM news_items WHERE date IN ($1, $2)', [today, tomorrow]);
+
+  // --- zonder nieuwsbericht: testp ziet op /vandaag geen "Nieuws!"-blok ---
+  await page.click('button:has-text("Uitloggen")');
+  await page.waitForLoadState('networkidle');
+  await page.fill('input[name="username"]', 'testp');
+  await page.fill('input[name="credential"]', '0611122233');
+  await page.click('button[type="submit"]');
+  await page.waitForLoadState('networkidle');
+  text = await page.textContent('body');
+  assert(!text.includes('Nieuws!'), 'zonder klaargezet nieuwsbericht toont /vandaag geen "Nieuws!"-blok');
+
+  // --- terug als beheerder, een bericht voor morgen én een bericht voor vandaag toevoegen ---
+  await page.click('button:has-text("Uitloggen")');
+  await page.waitForLoadState('networkidle');
+  await page.fill('input[name="username"]', 'beheerder');
+  await page.fill('input[name="credential"]', 'test-admin-123');
+  await page.click('button[type="submit"]');
+  await page.waitForLoadState('networkidle');
+  await page.click('a[href="/admin/news"]');
+  await page.waitForLoadState('networkidle');
+  text = await page.textContent('body');
+  assert(text.includes('Nog geen nieuwsberichten toegevoegd.'), 'zonder berichten toont het scherm "Nieuws" dat duidelijk');
+
+  // Let op: bewust gescopeerd op het toevoegformulier zelf — de pagina heeft ook een eigen
+  // "Uitloggen"-knop met hetzelfde type="submit", die eerder in de pagina staat en dus door
+  // een ongescopeerde 'button[type="submit"]'-klik per ongeluk geraakt zou worden.
+  const newsFormSel = 'form[action="/admin/news"]';
+  await page.fill('input[name="date"]', tomorrow);
+  await page.fill('textarea[name="message"]', 'Bericht voor morgen — hoort vandaag nog niet getoond te worden.');
+  await page.click(`${newsFormSel} button[type="submit"]`);
+  await page.waitForLoadState('networkidle');
+
+  await page.fill('input[name="date"]', today);
+  await page.fill('textarea[name="message"]', 'Aanstaande vrijdag is er geen les in verband met een feestdag.');
+  await page.click(`${newsFormSel} button[type="submit"]`);
+  await page.waitForLoadState('networkidle');
+  text = await page.textContent('body');
+  assert(text.includes('Aanstaande vrijdag is er geen les in verband met een feestdag.'), 'het toegevoegde bericht van vandaag staat in de lijst in het beheerscherm');
+  assert(text.includes('Bericht voor morgen'), 'het bericht voor morgen staat ook in de lijst');
+
+  // --- testp ziet nu wél het bericht van vandaag, met de titel "Nieuws!" ---
+  await page.click('button:has-text("Uitloggen")');
+  await page.waitForLoadState('networkidle');
+  await page.fill('input[name="username"]', 'testp');
+  await page.fill('input[name="credential"]', '0611122233');
+  await page.click('button[type="submit"]');
+  await page.waitForLoadState('networkidle');
+  text = await page.textContent('body');
+  assert(text.includes('Nieuws!'), 'met een klaargezet bericht van vandaag toont /vandaag het "Nieuws!"-blok');
+  assert(text.includes('Aanstaande vrijdag is er geen les in verband met een feestdag.'), 'de tekst van het bericht van vandaag staat op /vandaag');
+  assert(!text.includes('Bericht voor morgen'), 'het bericht van morgen wordt vandaag nog niet getoond');
+
+  // --- opruimen: beide testberichten weer verwijderen via de verwijderknop in het beheerscherm ---
+  await page.click('button:has-text("Uitloggen")');
+  await page.waitForLoadState('networkidle');
+  await page.fill('input[name="username"]', 'beheerder');
+  await page.fill('input[name="credential"]', 'test-admin-123');
+  await page.click('button[type="submit"]');
+  await page.waitForLoadState('networkidle');
+  await page.click('a[href="/admin/news"]');
+  await page.waitForLoadState('networkidle');
+  while (await page.locator('button:has-text("Verwijderen")').count() > 0) {
+    await page.click('button:has-text("Verwijderen")');
+    await page.waitForLoadState('networkidle');
+  }
+  text = await page.textContent('body');
+  assert(text.includes('Nog geen nieuwsberichten toegevoegd.'), 'na het verwijderen staan er geen nieuwsberichten meer');
+
+  await page.click('a[href="/admin/gebruikers"]');
+  await page.waitForLoadState('networkidle');
+}
+
 // --- betaaldatum van corrie in het verleden zetten via het bewerkformulier ---
 const corrieForm = await page.$('form[action="/admin/gebruikers/corrie"]');
 await corrieForm.$eval('input[name="paidUntil"]', (el) => (el.value = '2020-01-01'));
